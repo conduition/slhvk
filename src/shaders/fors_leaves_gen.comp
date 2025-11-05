@@ -1,0 +1,72 @@
+#version 430
+#extension GL_GOOGLE_include_directive : enable
+#include "common.comp"
+
+// A set of A-bit indices into the K FORS trees
+layout(binding = 1) buffer forsmsg {
+  uint fors_message[];
+};
+
+// This buffer will be filled with FORS leaf nodes
+layout(binding = 2) buffer forsnode {
+  uint fors_node_states[];
+};
+
+// The FORS signature.
+layout(binding = 3) buffer forssig {
+  uint fors_signature[];
+};
+
+const uint THREAD_COUNT = FORS_TREE_COUNT * FORS_LEAVES_COUNT;
+
+void main() {
+  uint thread_id = gl_GlobalInvocationID.x;
+  if (thread_id >= THREAD_COUNT) return;
+
+  uint fors_leaf_node_index = thread_id;
+  uint fors_tree = thread_id / FORS_LEAVES_COUNT;
+  uint node_index_inside_tree = thread_id % FORS_LEAVES_COUNT;
+
+  uint schedule[64];
+  define_schedule_1hash(
+    0, /* layer_address */
+    ADRS_TYPE_FORS_PRF,
+    signing_keypair_address,
+    0, /* tree_height */
+    fors_leaf_node_index,
+    tree_address,
+    sk_seed,
+    schedule
+  );
+
+  uint s[8] = {
+    sha256_state[0], sha256_state[1], sha256_state[2], sha256_state[3], // a b c d
+    sha256_state[4], sha256_state[5], sha256_state[6], sha256_state[7]  // e f g h
+  };
+  uint old_state[8] = s;
+
+  // Invoke the PRF to generate the FORS secret key preimage.
+  sha256_rounds_all(s, schedule);
+
+  // Write this preimage to the signature output if needed to sign the message.
+  if (node_index_inside_tree == fors_message[fors_tree]) {
+    uint sig_offset = fors_tree * (FORS_TREE_HEIGHT + 1) * HASH_WORDS;
+    for (uint i = 0; i < HASH_WORDS; i++) {
+      fors_signature[sig_offset + i] = flip_endianness(s[i]);
+    }
+  }
+
+  // Sets adrs type byte to FORS_TREE = 3
+  schedule[2] &= 0xFF00FFFF;
+  schedule[2] |= (ADRS_TYPE_FORS_TREE << 16);
+
+  // Fill the schedule with the seckey preimage and hash it again.
+  define_schedule_1hash_midwords(s, fors_leaf_node_index, schedule);
+  s = old_state;
+  sha256_rounds_all(s, schedule);
+
+  uint fors_node_offset = thread_id * HASH_WORDS;
+  for (uint i = 0; i < HASH_WORDS; i++) {
+    fors_node_states[fors_node_offset + i] = s[i];
+  }
+}

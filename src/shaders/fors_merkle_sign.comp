@@ -1,0 +1,133 @@
+#version 430
+#extension GL_GOOGLE_include_directive : enable
+#include "common.comp"
+
+// A set of A-bit indices into the K FORS trees
+layout(binding = 1) buffer forsmsg {
+  uint fors_message[];
+};
+
+// This buffer will be filled with FORS leaf nodes
+layout(binding = 2) buffer forsnode {
+  uint fors_node_states[];
+};
+
+// The FORS signature.
+layout(binding = 3) buffer forssig {
+  uint fors_signature[];
+};
+
+
+// Merges two FORS child node hashes at positions `lnode_pos` and `rnode_pos`
+// into a parent node hash at height `node_height` and index `node_index`.
+// The output is written to `fors_node_states[lnode_pos]`.
+void fors_node_merge(
+  uint lnode_pos,
+  uint rnode_pos,
+  uint node_height,
+  uint node_index
+) {
+  uint schedule[64];
+  schedule[0] = (tree_address.hi >> 8);
+  schedule[1] = (tree_address.hi << 24) | (tree_address.lo >> 8);
+  schedule[2] = (tree_address.lo << 24) | (ADRS_TYPE_FORS_TREE << 16) | (signing_keypair_address >> 16);
+  schedule[3] = (signing_keypair_address << 16) | (node_height >> 16);
+  schedule[4] = (node_height << 16) | (node_index >> 16);
+  schedule[5] = (node_index << 16)  | (fors_node_states[lnode_pos] >> 16);
+
+  for (uint i = 0; i < HASH_WORDS - 1; i++) {
+    schedule[6 + i] = (fors_node_states[lnode_pos + i] << 16) |
+                      (fors_node_states[lnode_pos + i + 1] >> 16);
+  }
+  schedule[6 + HASH_WORDS - 1] = (fors_node_states[lnode_pos + HASH_WORDS - 1] << 16) |
+                                 (fors_node_states[rnode_pos] >> 16);
+
+  // For 192-bit and 256-bit parameter sets, we must invoke the compression function twice.
+  if (HASH_WORDS > 4) {
+    // TODO: sha512
+  }
+  for (uint i = 0; i < HASH_WORDS - 1; i++) {
+    schedule[6 + HASH_WORDS + i] = (fors_node_states[rnode_pos + i] << 16) |
+                                   (fors_node_states[rnode_pos + i + 1] >> 16);
+  }
+  schedule[6 + 2 * HASH_WORDS - 1] = (fors_node_states[rnode_pos + HASH_WORDS - 1] << 16) | 0x8000;
+
+  // Padding
+  for (uint i = 6 + 2 * HASH_WORDS; i < 15; i++) {
+    schedule[i] = 0;
+  }
+
+  // msg_bit_len
+  schedule[15] = 8 * (64 + 22 + 2 * HASH_WORDS * 4);
+
+  uint s[8] = {
+    sha256_state[0], sha256_state[1], sha256_state[2], sha256_state[3], // a b c d
+    sha256_state[4], sha256_state[5], sha256_state[6], sha256_state[7]  // e f g h
+  };
+  sha256_rounds_all(s, schedule);
+
+  // Write the compressed output to the left node position.
+  for (uint i = 0; i < HASH_WORDS; i++) {
+    fors_node_states[lnode_pos + i] = s[i];
+  }
+}
+
+void main() {
+  uint local_id = gl_LocalInvocationID.x;
+  uint fors_tree = gl_WorkGroupID.x;
+
+  uint fors_node_offset = fors_tree * FORS_LEAVES_COUNT * HASH_WORDS;
+  uint fors_sig_offset = HASH_WORDS + fors_tree * (FORS_TREE_HEIGHT + 1) * HASH_WORDS;
+
+  // First find and write the height=0 merkle hash: the FORS node
+  // at leaf index (fors_message[tree] ^ 1)
+  if (local_id == 0) {
+    uint first_hash_offset = fors_node_offset + (fors_message[fors_tree] ^ 1) * HASH_WORDS;
+    for (uint i = 0; i < HASH_WORDS; i++) {
+      fors_signature[fors_sig_offset + i] = flip_endianness(fors_node_states[first_hash_offset + i]);
+    }
+  }
+
+  // For each layer in the FORS tree:
+  for (uint node_height = 1; node_height <= FORS_TREE_HEIGHT; node_height++) {
+    uint next_level_nodes_len = 1 << (FORS_TREE_HEIGHT - node_height);
+    uint prev_layer_node_offset = (1 << (node_height - 1)) * HASH_WORDS;
+    uint global_node_index_offset = fors_tree * next_level_nodes_len;
+
+    // Each thread may need to compute multiple nodes on this layer of the tree
+    for (uint local_node_index = local_id; local_node_index < next_level_nodes_len; local_node_index += gl_WorkGroupSize.x) {
+      uint left_child_index = local_node_index * 2;
+      uint right_child_index = local_node_index * 2 + 1;
+
+      uint lchild_offset = fors_node_offset + left_child_index * prev_layer_node_offset;
+      uint rchild_offset = fors_node_offset + right_child_index * prev_layer_node_offset;
+
+      fors_node_merge(
+        lchild_offset,
+        rchild_offset,
+        node_height,
+        global_node_index_offset + local_node_index
+      );
+
+      // A smidgeon of bit manipulation which determines if this node is one of the
+      // nodes we need to write to the output FORS signature buffer.
+      if (local_node_index == ((fors_message[fors_tree] >> node_height) ^ 1)) {
+        uint merkle_offset = fors_sig_offset + node_height * HASH_WORDS;
+        for (uint i = 0; i < HASH_WORDS; i++) {
+          fors_signature[merkle_offset + i] = flip_endianness(fors_node_states[lchild_offset + i]);
+        }
+      }
+    }
+
+    // Synchronize the work group once each layer is computed. The next layer of nodes in each tree can only
+    // safely be computed if all child nodes are correctly populated in the fors_node_states buffer.
+    barrier();
+  }
+
+  // The FORS roots will be sent back to the host. Flip the bytes back to big-endian representation.
+  if (local_id == 0) {
+    for (uint i = 0; i < HASH_WORDS; i++) {
+      fors_node_states[fors_node_offset + i] = flip_endianness(fors_node_states[fors_node_offset + i]);
+    }
+  }
+}

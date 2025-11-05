@@ -53,3 +53,8 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+*.spv
+src/shaders/*.h
+*.test
+tests/runner

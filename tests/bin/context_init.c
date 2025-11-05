@@ -1,0 +1,43 @@
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#include "../utils.h"
+#include "context.h"
+
+int main() {
+  init_test();
+
+  SlhvkContext ctx;
+  int err = slhvkContextInit(&ctx);
+  if (err) {
+    eprintf("failed to init context: %d\n", err);
+    return err;
+  }
+
+  uint8_t pkSeed[N] = {16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+  uint8_t pkRoot[N] = {0};
+  uint8_t skPrf[N] = {0};
+  uint32_t skSeed[HASH_WORDS] = {0x00001122, 0xff299990, 0x01020304, 0xaabbccdd};
+  const uint8_t message[] = "hello world";
+
+  uint8_t slhDsaSignature[SLH_DSA_SIGNATURE_SIZE];
+
+  err = slhvkSignInternal(
+    &ctx,
+    skSeed,
+    skPrf,
+    pkSeed,
+    pkRoot,
+    message,
+    sizeof(message) - 1, // minus 1 for null terminator
+    slhDsaSignature
+  );
+  if (err) {
+    eprintf("failed to run context: %d\n", err);
+    return err;
+  }
+
+  return 0;
+}

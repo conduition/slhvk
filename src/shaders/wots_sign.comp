@@ -1,0 +1,79 @@
+#version 430
+#extension GL_GOOGLE_include_directive : enable
+#include "common.comp"
+
+// The hypertree signature (a chain of XMSS signatures)
+layout(binding = 1) buffer htsig {
+  uint hypertree_signature[];
+};
+
+// XMSS root hashes, converted into checksummed base-W messages (for WOTS signing).
+layout(binding = 2) buffer rootmsg {
+  uint xmss_root_messages[];
+};
+
+const uint THREAD_COUNT = HYPERTREE_LAYERS * WOTS_CHAIN_COUNT;
+
+void main() {
+  uint thread_id = gl_GlobalInvocationID.x;
+  if (thread_id >= THREAD_COUNT) return;
+
+  uint layer_address = thread_id / WOTS_CHAIN_COUNT;
+  uint chain_address = thread_id % WOTS_CHAIN_COUNT;
+
+  uint keypair_address = layer_address == 0
+    ? signing_keypair_address
+    : (shifted_tree_address(tree_address, XMSS_HEIGHT, layer_address - 1).lo & (XMSS_LEAVES - 1));
+
+  uint64 tree_address_shifted = shifted_tree_address(tree_address, XMSS_HEIGHT, layer_address);
+
+  // These message words were set either:
+  // - For layer 0: by the host, from the output of the secondary device FORS shaders.
+  // - For layers >= 1: by the XMSS merkle sign shader.
+  uint message_word = xmss_root_messages[layer_address * WOTS_CHAIN_COUNT + chain_address];
+
+  uint schedule[64];
+  define_schedule_1hash(
+    layer_address,
+    ADRS_TYPE_WOTS_PRF,
+    keypair_address,
+    chain_address,
+    0, /* hash_address */
+    tree_address_shifted,
+    sk_seed,
+    schedule
+  );
+
+  uint s[8] = {
+    sha256_state[0], sha256_state[1], sha256_state[2], sha256_state[3], // a b c d
+    sha256_state[4], sha256_state[5], sha256_state[6], sha256_state[7]  // e f g h
+  };
+  uint old_state[8] = s;
+
+  // Invoke the PRF to generate the initial preimage of the WOTS hash chain.
+  sha256_rounds_all(s, schedule);
+
+  // Sets adrs type byte to WOTS_HASH = 0
+  schedule[2] &= 0xFF00FFFF;
+
+  // Precompute the first five rounds, as they are the same for every chain iteration.
+  uint fifth_round_state[8] = old_state;
+  sha256_rounds_0_thru_5(fifth_round_state, schedule);
+
+  // Run the WOTS hash iteration function until we get to the chain's signature hash.
+  for (uint hash_address = 0; hash_address < message_word; hash_address++) {
+    // fill in the schedule with the WOTS_PRF output (i == 0), or the WOTS_HASH
+    // output from the prior iteration (i > 0).
+    define_schedule_1hash_midwords(s, hash_address, schedule)
+
+    // Run a new hash invocation using the precomputed 5th-round state
+    s = fifth_round_state;
+    sha256_rounds_5_thru_64(s, schedule, old_state);
+  }
+
+  // TODO: fill real wots sign output
+  uint xmss_sig_offset = layer_address * XMSS_SIGNATURE_WORDS + chain_address * HASH_WORDS;
+  for (uint i = 0; i < HASH_WORDS; i++) {
+    hypertree_signature[xmss_sig_offset + i] = flip_endianness(s[i]);
+  }
+}
