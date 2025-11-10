@@ -1,6 +1,6 @@
 #version 430
 #extension GL_GOOGLE_include_directive : enable
-#include "common.comp"
+#include "signing_common.comp"
 
 // A set of A-bit indices into the K FORS trees
 layout(binding = 1) buffer forsmsg {

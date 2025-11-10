@@ -1,6 +1,6 @@
 #version 430
 #extension GL_GOOGLE_include_directive : enable
-#include "common.comp"
+#include "signing_common.comp"
 
 const uint THREAD_COUNT = HYPERTREE_LAYERS * XMSS_LEAVES;
 const uint WOTS_TIPS_WORDS = WOTS_CHAIN_COUNT * HASH_WORDS;

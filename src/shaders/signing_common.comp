@@ -1,0 +1,16 @@
+#include "common.comp"
+
+// Common inputs available to all signing shaders.
+layout(binding = 0) buffer inputs {
+  // The SHA256 state after absorbing the `pk_seed` and padding.
+  uint sha256_state[8];
+
+  // Secret seed from the private key.
+  uint sk_seed[HASH_WORDS];
+
+  // adrs[1:4]
+  uint64 tree_address;
+
+  // the index of the WOTS keypair to be used for signing the message at hypertree layer zero.
+  uint signing_keypair_address;
+};
