@@ -25,6 +25,7 @@ int main() {
   uint8_t slhDsaSignature[SLH_DSA_SIGNATURE_SIZE];
 
   const uint8_t contextString[] = "string";
+  const uint8_t addrnd[] = {5, 4, 3, 2, 1, 0, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
 
   err = slhvkSignPure(
     &ctx,
@@ -32,6 +33,7 @@ int main() {
     skPrf,
     pkSeed,
     pkRoot,
+    addrnd,
     contextString, 6, // context string
     message,
     sizeof(message) - 1, // minus 1 for null terminator

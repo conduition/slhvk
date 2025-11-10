@@ -148,9 +148,10 @@ int slhvkSignPure(
   const uint8_t skPrf[N],
   const uint8_t pkSeed[N],
   const uint8_t pkRoot[N],
+  const uint8_t addrnd[N],
   const uint8_t* contextString,
   uint8_t contextStringSize,
   const uint8_t* rawMessage,
   size_t rawMessageSize,
-  uint8_t* signatureOutput
+  uint8_t signatureOutput[SLH_DSA_SIGNATURE_SIZE]
 );
