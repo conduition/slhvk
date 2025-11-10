@@ -316,7 +316,8 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   };
 
   // Try to enable validation layer if available.
-  #ifdef DEBUG
+  char* enableValidationLayers = getenv("SLHVK_ENABLE_VALIDATION_LAYERS");
+  if (enableValidationLayers != NULL && strcmp(enableValidationLayers, "1") == 0) {
     uint32_t numLayerProperties;
     err = vkEnumerateInstanceLayerProperties(&numLayerProperties, NULL);
     if (err) goto cleanup;
@@ -337,7 +338,7 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
       }
     }
     free(layerProperties);
-  #endif
+  }
 
   // enable macOS support via MoltenVK
   #ifdef __APPLE__

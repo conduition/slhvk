@@ -1,12 +1,6 @@
 CC     ?= cc
 CFLAGS += -O3 -Wall -Wextra -Werror=pedantic -Werror=vla
 
-# Print test debug info
-ifeq ($(DEBUG), 1)
-	CFLAGS += -DDEBUG=1
-endif
-
-
 HDR := $(wildcard src/*.h)
 SRC := $(wildcard src/*.c)
 OBJ := $(SRC:.c=.o)

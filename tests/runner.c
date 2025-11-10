@@ -19,11 +19,12 @@ int run_test(const char* executable, int* exit_status) {
 
   // Child
   if (pid == 0) {
-    #ifndef DEBUG
+    char* test_silent = getenv("TEST_SILENT");
+    if (test_silent != NULL && strcmp(test_silent, "1") == 0) {
       int fd[2];
       pipe(fd);
-      dup2(fd[1], 1);
-    #endif
+      dup2(fd[1], STDOUT_FILENO);
+    }
 
     char* argv[] = {NULL};
     execv(executable, argv);
