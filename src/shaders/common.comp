@@ -310,7 +310,7 @@ layout(binding = 0) buffer inputs {
   // Secret seed from the private key.
   uint sk_seed[HASH_WORDS];
 
-  // adrs[0:4]
+  // adrs[1:4]
   uint64 tree_address;
 
   // the index of the WOTS keypair to be used for signing the message at hypertree layer zero.

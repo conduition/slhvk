@@ -2,20 +2,6 @@
 
 #include "params.h"
 
-typedef struct CommonInputs {
-  // The SHA256 state after absorbing the `pk_seed` and padding.
-  uint32_t sha256_state[8];
-
-  // Secret seed from the private key.
-  uint32_t sk_seed[HASH_WORDS];
-
-  // adrs[0:4]
-  uint64_t tree_address;
-
-  // the index of the keypair to be used for signing the message.
-  uint32_t signing_keypair_address;
-} CommonInputs;
-
 typedef struct SlhvkContext {
   VkInstance instance;
 

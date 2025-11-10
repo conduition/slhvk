@@ -183,6 +183,21 @@ static void bindBuffersToDescriptorSet(
 }
 
 
+typedef struct CommonInputs {
+  // The SHA256 state after absorbing the `pk_seed` and padding.
+  uint32_t sha256State[8];
+
+  // Secret seed from the private key.
+  uint32_t skSeed[HASH_WORDS];
+
+  // adrs[1:4]
+  uint64_t treeAddress;
+
+  // the index of the layer 0 keypair to be used for signing the message.
+  uint32_t signingKeypairAddress;
+} CommonInputs;
+
+
 void slhvkContextFree(SlhvkContext* ctx) {
   if (ctx != NULL) {
     /********** Free device resources **********/
@@ -1525,16 +1540,16 @@ int slhvkSignPure(
     );
     if (err) goto cleanup;
 
-    memcpy(&mapped->sha256_state[0], shaCtxInitial.state, sizeof(uint32_t) * 8);
+    memcpy(&mapped->sha256State[0], shaCtxInitial.state, sizeof(uint32_t) * 8);
 
     // Copy the skSeed into a big-endian encoded u32 array
     for (size_t i = 0; i < HASH_WORDS; i++) {
       size_t i4 = i * sizeof(uint32_t);
-      mapped->sk_seed[i] = ((uint32_t) skSeed[i4] << 24) | ((uint32_t) skSeed[i4 + 1] << 16) |
-                           ((uint32_t) skSeed[i4 + 2] << 8) | (uint32_t) skSeed[i4 + 3];
+      mapped->skSeed[i] = ((uint32_t) skSeed[i4] << 24) | ((uint32_t) skSeed[i4 + 1] << 16) |
+                          ((uint32_t) skSeed[i4 + 2] << 8) | (uint32_t) skSeed[i4 + 3];
     }
-    mapped->tree_address = treeAddress;
-    mapped->signing_keypair_address = signingKeypairAddress;
+    mapped->treeAddress = treeAddress;
+    mapped->signingKeypairAddress = signingKeypairAddress;
     vkUnmapMemory(devices[i], memories[i]);
   }
 
