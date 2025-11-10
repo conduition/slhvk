@@ -1,6 +1,5 @@
 #pragma once
 #include <stdint.h>
-#include <stddef.h>
 
 extern const uint32_t SHA256_INITIAL_STATE[8];
 
