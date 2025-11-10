@@ -1435,12 +1435,14 @@ static void prepstate(ShaContext* shaCtx, const uint8_t pkSeed[N]) {
   sha256_update(shaCtx, block, 64);
 }
 
-int slhvkSignInternal(
+int slhvkSignPure(
   SlhvkContext* ctx,
   const uint32_t skSeed[HASH_WORDS],
   const uint8_t skPrf[N],
   const uint8_t pkSeed[N],
   const uint8_t pkRoot[N],
+  const uint8_t* contextString,
+  uint8_t contextStringSize,
   const uint8_t* rawMessage,
   size_t rawMessageSize,
   uint8_t* signatureOutput
@@ -1449,6 +1451,8 @@ int slhvkSignInternal(
   slhvkMessagePrf(
     skPrf,
     pkSeed, // TODO: opt rand
+    contextString,
+    contextStringSize,
     rawMessage,
     rawMessageSize,
     randomizer
@@ -1461,6 +1465,8 @@ int slhvkSignInternal(
     randomizer,
     pkSeed,
     pkRoot,
+    contextString,
+    contextStringSize,
     rawMessage,
     rawMessageSize,
     forsIndices,
@@ -1573,7 +1579,7 @@ int slhvkSignInternal(
   vkUnmapMemory(ctx->secondaryDevice, ctx->secondaryForsRootsBufferMemory);
 
   uint32_t wotsMessage[WOTS_CHAIN_COUNT];
-  hashForsRootsToWotsMessage(
+  slhvkHashForsRootsToWotsMessage(
     forsRoots,
     treeAddress,
     signingKeypairAddress,

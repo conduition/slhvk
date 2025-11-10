@@ -3,7 +3,7 @@
 
 #include "sha256.h"
 
-void hashForsRootsToWotsMessage(
+void slhvkHashForsRootsToWotsMessage(
   const uint8_t* forsRoots,
   uint64_t treeAddress,
   uint32_t keypairAddress,

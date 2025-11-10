@@ -10,6 +10,8 @@ const uint32_t SIGNING_KEYPAIR_ADDRESS_MASK = (1 << XMSS_HEIGHT) - 1;
 void slhvkMessagePrf(
   const uint8_t* skPrf,
   const uint8_t* optRand,
+  const uint8_t* contextString,
+  uint8_t contextStringSize,
   const uint8_t* rawMessage,
   size_t rawMessageSize,
   uint8_t randomizer[N]
@@ -29,6 +31,11 @@ void slhvkMessagePrf(
   sha256_init(&hmacHashState);
   sha256_update(&hmacHashState, innerK, sizeof(innerK));
   sha256_update(&hmacHashState, optRand, N);
+  if (contextStringSize > 0) {
+    uint8_t contextStringHeader[2] = { 0, contextStringSize };
+    sha256_update(&hmacHashState, contextStringHeader, sizeof(contextStringHeader));
+    sha256_update(&hmacHashState, contextString, contextStringSize);
+  }
   sha256_update(&hmacHashState, rawMessage, rawMessageSize);
 
   uint8_t hmacInnerHash[32];
@@ -44,6 +51,8 @@ void slhvkDigestAndSplitMsg(
   const uint8_t randomizer[N],
   const uint8_t pkSeed[N],
   const uint8_t pkRoot[N],
+  const uint8_t* contextString,
+  uint8_t contextStringSize,
   const uint8_t* rawMessage,
   size_t rawMessageSize,
   uint32_t forsIndices[FORS_TREE_COUNT],
@@ -58,6 +67,11 @@ void slhvkDigestAndSplitMsg(
   ShaContext shaCtxInner;
   sha256_clone(&shaCtxInner, &shaCtx);
   sha256_update(&shaCtxInner, pkRoot, N);
+  if (contextStringSize > 0) {
+    uint8_t contextStringHeader[2] = { 0, contextStringSize };
+    sha256_update(&shaCtxInner, contextStringHeader, sizeof(contextStringHeader));
+    sha256_update(&shaCtxInner, contextString, contextStringSize);
+  }
   sha256_update(&shaCtxInner, rawMessage, rawMessageSize);
   uint8_t digestInner[32];
   sha256_finalize(&shaCtxInner, digestInner, sizeof(digestInner));

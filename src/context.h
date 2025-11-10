@@ -142,12 +142,14 @@ typedef enum SlhvkError {
 void slhvkContextFree(SlhvkContext* ctx);
 int slhvkContextInit(SlhvkContext* ctx);
 
-int slhvkSignInternal(
+int slhvkSignPure(
   SlhvkContext* ctx,
   const uint32_t skSeed[HASH_WORDS],
   const uint8_t skPrf[N],
   const uint8_t pkSeed[N],
   const uint8_t pkRoot[N],
+  const uint8_t* contextString,
+  uint8_t contextStringSize,
   const uint8_t* rawMessage,
   size_t rawMessageSize,
   uint8_t* signatureOutput

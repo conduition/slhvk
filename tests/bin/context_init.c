@@ -24,12 +24,15 @@ int main() {
 
   uint8_t slhDsaSignature[SLH_DSA_SIGNATURE_SIZE];
 
-  err = slhvkSignInternal(
+  const uint8_t contextString[] = "string";
+
+  err = slhvkSignPure(
     &ctx,
     skSeed,
     skPrf,
     pkSeed,
     pkRoot,
+    contextString, 6, // context string
     message,
     sizeof(message) - 1, // minus 1 for null terminator
     slhDsaSignature

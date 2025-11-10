@@ -31,7 +31,7 @@ static void hashToBaseW(const uint8_t hash[N], uint32_t wotsMessage[WOTS_CHAIN_C
   }
 }
 
-void hashForsRootsToWotsMessage(
+void slhvkHashForsRootsToWotsMessage(
   const uint8_t* forsRoots,
   uint64_t treeAddress,
   uint32_t keypairAddress,
