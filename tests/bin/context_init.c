@@ -29,21 +29,25 @@ int main() {
   const uint8_t addrnd[] = {5, 4, 3, 2, 1, 0, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
 
   err = slhvkSignPure(
-    &ctx,
+    ctx,
     skSeed,
     skPrf,
     pkSeed,
     pkRoot,
     addrnd,
-    contextString, 6, // context string
+    contextString,
+    sizeof(contextString) - 1, // minus 1 for null terminator
     message,
     sizeof(message) - 1, // minus 1 for null terminator
     slhDsaSignature
   );
   if (err) {
     eprintf("failed to run context: %d\n", err);
-    return err;
+    goto cleanup;
   }
 
-  return 0;
+cleanup:
+  slhvkContextFree(ctx);
+
+  return err;
 }

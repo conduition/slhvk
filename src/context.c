@@ -199,7 +199,124 @@ typedef struct CommonInputs {
 } CommonInputs;
 
 
-void slhvkContextFree(SlhvkContext* ctx) {
+typedef struct SlhvkContext_T {
+  VkInstance instance;
+
+  // Resources for the primary device
+  VkPhysicalDevice           primaryPhysicalDevice;
+  VkPhysicalDeviceProperties primaryDeviceProperties;
+  uint32_t                   primaryDeviceQueueFamily;
+  VkDevice                   primaryDevice;
+  VkDescriptorPool           primaryDescriptorPool;
+  VkCommandPool              primaryCommandPool;
+
+  // WOTS chain precompute pipeline resources
+  VkShaderModule        wotsTipsPrecomputeShader;
+  VkPipeline            wotsTipsPrecomputePipeline;
+  VkPipelineLayout      wotsTipsPrecomputePipelineLayout;
+  VkDescriptorSet       wotsTipsPrecomputeDescriptorSet;
+  VkDescriptorSetLayout wotsTipsPrecomputeDescriptorSetLayout;
+
+  // XMSS leaf precompute pipeline resources
+  VkShaderModule        xmssLeavesPrecomputeShader;
+  VkPipeline            xmssLeavesPrecomputePipeline;
+  VkPipelineLayout      xmssLeavesPrecomputePipelineLayout;
+  VkDescriptorSet       xmssLeavesPrecomputeDescriptorSet;
+  VkDescriptorSetLayout xmssLeavesPrecomputeDescriptorSetLayout;
+
+  // XMSS merkle signing pipeline resources
+  VkShaderModule        xmssMerkleSignShader;
+  VkPipeline            xmssMerkleSignPipeline;
+  VkPipelineLayout      xmssMerkleSignPipelineLayout;
+  VkDescriptorSet       xmssMerkleSignDescriptorSet;
+  VkDescriptorSetLayout xmssMerkleSignDescriptorSetLayout;
+
+  // WOTS signing pipeline resources
+  VkShaderModule        wotsSignShader;
+  VkPipeline            wotsSignPipeline;
+  VkPipelineLayout      wotsSignPipelineLayout;
+  VkDescriptorSet       wotsSignDescriptorSet;
+  VkDescriptorSetLayout wotsSignDescriptorSetLayout;
+
+  // primary device buffers
+  VkBuffer primaryInputsBufferDeviceLocal;
+  VkBuffer primaryInputsBufferHostVisible;
+  VkBuffer primaryWotsChainBuffer;
+  VkBuffer primaryXmssNodesBuffer;
+  VkBuffer primaryXmssMessagesBuffer;
+  VkBuffer primaryForsPubkeyStagingBuffer;
+  VkBuffer primaryHypertreeSignatureBufferDeviceLocal;
+  VkBuffer primaryHypertreeSignatureBufferHostVisible;
+
+  // primary device memory backings (one per buffer)
+  VkDeviceMemory primaryInputsBufferDeviceLocalMemory;
+  VkDeviceMemory primaryInputsBufferHostVisibleMemory;
+  VkDeviceMemory primaryWotsChainBufferMemory;
+  VkDeviceMemory primaryXmssNodesBufferMemory;
+  VkDeviceMemory primaryXmssMessagesBufferMemory;
+  VkDeviceMemory primaryForsPubkeyStagingBufferMemory;
+  VkDeviceMemory primaryHypertreeSignatureBufferDeviceLocalMemory;
+  VkDeviceMemory primaryHypertreeSignatureBufferHostVisibleMemory;
+
+  // primary device memory metadata
+  VkMemoryPropertyFlags primaryDeviceLocalMemoryFlags;
+  VkMemoryPropertyFlags primaryDeviceHostVisibleMemoryFlags;
+
+  // primary device command buffers
+  VkCommandBuffer primaryHypertreePresignCommandBuffer;
+  VkCommandBuffer primaryHypertreeFinishCommandBuffer;
+
+  // Resources for the secondary device
+  VkPhysicalDevice           secondaryPhysicalDevice;
+  VkPhysicalDeviceProperties secondaryDeviceProperties;
+  uint32_t                   secondaryDeviceQueueFamily;
+  VkDevice                   secondaryDevice;
+  VkDescriptorPool           secondaryDescriptorPool;
+  VkCommandPool              secondaryCommandPool;
+
+  // FORS leaves gen pipeline resources
+  VkShaderModule        forsLeavesGenShader;
+  VkPipeline            forsLeavesGenPipeline;
+  VkPipelineLayout      forsLeavesGenPipelineLayout;
+  VkDescriptorSet       forsLeavesGenDescriptorSet;
+  VkDescriptorSetLayout forsLeavesGenDescriptorSetLayout;
+
+  // FORS merkle sign pipeline resources
+  VkShaderModule        forsMerkleSignShader;
+  VkPipeline            forsMerkleSignPipeline;
+  VkPipelineLayout      forsMerkleSignPipelineLayout;
+  VkDescriptorSet       forsMerkleSignDescriptorSet;
+  VkDescriptorSetLayout forsMerkleSignDescriptorSetLayout;
+
+  // secondary device buffers
+  VkBuffer secondaryInputsBufferDeviceLocal;
+  VkBuffer secondaryInputsBufferHostVisible;
+  VkBuffer secondaryForsMessageBufferDeviceLocal;
+  VkBuffer secondaryForsMessageBufferHostVisible;
+  VkBuffer secondaryForsNodesBuffer;
+  VkBuffer secondaryForsSignatureBufferDeviceLocal;
+  VkBuffer secondaryForsSignatureBufferHostVisible;
+  VkBuffer secondaryForsRootsBuffer;
+
+  // secondary device memory backings (one per buffer)
+  VkDeviceMemory secondaryInputsBufferDeviceLocalMemory;
+  VkDeviceMemory secondaryInputsBufferHostVisibleMemory;
+  VkDeviceMemory secondaryForsMessageBufferDeviceLocalMemory;
+  VkDeviceMemory secondaryForsMessageBufferHostVisibleMemory;
+  VkDeviceMemory secondaryForsNodesBufferMemory;
+  VkDeviceMemory secondaryForsSignatureBufferDeviceLocalMemory;
+  VkDeviceMemory secondaryForsSignatureBufferHostVisibleMemory;
+  VkDeviceMemory secondaryForsRootsBufferMemory;
+
+  // secondary device memory metadata
+  VkMemoryPropertyFlags secondaryDeviceLocalMemoryFlags;
+  VkMemoryPropertyFlags secondaryDeviceHostVisibleMemoryFlags;
+
+  // secondary device command buffer
+  VkCommandBuffer secondaryForsCommandBuffer;
+} SlhvkContext_T;
+
+void slhvkContextFree(SlhvkContext_T* ctx) {
   if (ctx != NULL) {
     /********** Free device resources **********/
 
@@ -292,13 +409,13 @@ void slhvkContextFree(SlhvkContext* ctx) {
     }
 
     vkDestroyInstance(ctx->instance, NULL);
-    *ctx = (SlhvkContext) {0};
+    free(ctx);
   }
 }
 
-int slhvkContextInit(SlhvkContext* ctxPtr) {
+int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   VkPhysicalDevice* physicalDevices = NULL;
-  SlhvkContext ctx = {0};
+  SlhvkContext_T* ctx = calloc(1, sizeof(SlhvkContext_T));
   int err = 0;
 
 
@@ -347,14 +464,14 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
     instanceCreateInfo.ppEnabledExtensionNames = extensions;
   #endif
 
-  err = vkCreateInstance(&instanceCreateInfo, NULL, &ctx.instance);
+  err = vkCreateInstance(&instanceCreateInfo, NULL, &ctx->instance);
   if (err) goto cleanup;
 
 
   /**************  Find primary and secondary physical devices  *****************/
 
   uint32_t physicalDevicesCount = 0;
-  err = vkEnumeratePhysicalDevices(ctx.instance, &physicalDevicesCount, NULL);
+  err = vkEnumeratePhysicalDevices(ctx->instance, &physicalDevicesCount, NULL);
   if (err) goto cleanup;
   else if (physicalDevicesCount == 0) {
     err = SLHVK_ERROR_NO_COMPUTE_DEVICE;
@@ -362,7 +479,7 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   }
 
   physicalDevices = (VkPhysicalDevice*) malloc(physicalDevicesCount * sizeof(VkPhysicalDevice));
-  err = vkEnumeratePhysicalDevices(ctx.instance, &physicalDevicesCount, physicalDevices);
+  err = vkEnumeratePhysicalDevices(ctx->instance, &physicalDevicesCount, physicalDevices);
   if (err) return err;
   else if (physicalDevicesCount == 0) {
     err = SLHVK_ERROR_NO_COMPUTE_DEVICE;
@@ -379,52 +496,52 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
     // First, use any two devices. Then, replace the primary and secondary devices if
     // we find any superior available devices.
-    if (ctx.primaryPhysicalDevice == NULL) {
-      ctx.primaryPhysicalDevice = physicalDevices[i];
-      ctx.primaryDeviceProperties = deviceProps;
-      ctx.primaryDeviceQueueFamily = computeQueueFamily;
-    } else if (ctx.secondaryPhysicalDevice == NULL) {
-      ctx.secondaryPhysicalDevice = physicalDevices[i];
-      ctx.secondaryDeviceProperties = deviceProps;
-      ctx.secondaryDeviceQueueFamily = computeQueueFamily;
-    } else if (deviceProps.limits.maxComputeSharedMemorySize > ctx.primaryDeviceProperties.limits.maxComputeSharedMemorySize) {
-      ctx.primaryPhysicalDevice = physicalDevices[i];
-      ctx.primaryDeviceProperties = deviceProps;
-      ctx.primaryDeviceQueueFamily = computeQueueFamily;
-    } else if (deviceProps.limits.maxComputeSharedMemorySize > ctx.secondaryDeviceProperties.limits.maxComputeSharedMemorySize) {
-      ctx.secondaryPhysicalDevice = physicalDevices[i];
-      ctx.secondaryDeviceProperties = deviceProps;
-      ctx.secondaryDeviceQueueFamily = computeQueueFamily;
+    if (ctx->primaryPhysicalDevice == NULL) {
+      ctx->primaryPhysicalDevice = physicalDevices[i];
+      ctx->primaryDeviceProperties = deviceProps;
+      ctx->primaryDeviceQueueFamily = computeQueueFamily;
+    } else if (ctx->secondaryPhysicalDevice == NULL) {
+      ctx->secondaryPhysicalDevice = physicalDevices[i];
+      ctx->secondaryDeviceProperties = deviceProps;
+      ctx->secondaryDeviceQueueFamily = computeQueueFamily;
+    } else if (deviceProps.limits.maxComputeSharedMemorySize > ctx->primaryDeviceProperties.limits.maxComputeSharedMemorySize) {
+      ctx->primaryPhysicalDevice = physicalDevices[i];
+      ctx->primaryDeviceProperties = deviceProps;
+      ctx->primaryDeviceQueueFamily = computeQueueFamily;
+    } else if (deviceProps.limits.maxComputeSharedMemorySize > ctx->secondaryDeviceProperties.limits.maxComputeSharedMemorySize) {
+      ctx->secondaryPhysicalDevice = physicalDevices[i];
+      ctx->secondaryDeviceProperties = deviceProps;
+      ctx->secondaryDeviceQueueFamily = computeQueueFamily;
     }
   }
 
   free(physicalDevices);
   physicalDevices = NULL;
 
-  if (ctx.primaryPhysicalDevice == NULL) {
+  if (ctx->primaryPhysicalDevice == NULL) {
     err = SLHVK_ERROR_NO_COMPUTE_DEVICE;
     goto cleanup;
   }
 
   // Only one device available. Use it as primary and secondary.
-  if (ctx.secondaryPhysicalDevice == NULL) {
-    ctx.secondaryPhysicalDevice = ctx.primaryPhysicalDevice;
-    ctx.secondaryDeviceProperties = ctx.primaryDeviceProperties;
-    ctx.secondaryDeviceQueueFamily = ctx.primaryDeviceQueueFamily;
+  if (ctx->secondaryPhysicalDevice == NULL) {
+    ctx->secondaryPhysicalDevice = ctx->primaryPhysicalDevice;
+    ctx->secondaryDeviceProperties = ctx->primaryDeviceProperties;
+    ctx->secondaryDeviceQueueFamily = ctx->primaryDeviceQueueFamily;
   } else if (
-    ctx.secondaryDeviceProperties.limits.maxComputeSharedMemorySize > ctx.primaryDeviceProperties.limits.maxComputeSharedMemorySize
+    ctx->secondaryDeviceProperties.limits.maxComputeSharedMemorySize > ctx->primaryDeviceProperties.limits.maxComputeSharedMemorySize
   ) {
     // If the secondary device is better than the primary, swap them so the primary is always more powerful.
-    VkPhysicalDevice           tmpDevice      = ctx.secondaryPhysicalDevice;
-    VkPhysicalDeviceProperties tmpProps       = ctx.secondaryDeviceProperties;
-    uint32_t                   tmpQueueFamily = ctx.secondaryDeviceQueueFamily;
+    VkPhysicalDevice           tmpDevice      = ctx->secondaryPhysicalDevice;
+    VkPhysicalDeviceProperties tmpProps       = ctx->secondaryDeviceProperties;
+    uint32_t                   tmpQueueFamily = ctx->secondaryDeviceQueueFamily;
 
-    ctx.secondaryPhysicalDevice = ctx.primaryPhysicalDevice;
-    ctx.secondaryDeviceProperties = ctx.primaryDeviceProperties;
-    ctx.secondaryDeviceQueueFamily = ctx.primaryDeviceQueueFamily;
-    ctx.primaryPhysicalDevice = tmpDevice;
-    ctx.primaryDeviceProperties = tmpProps;
-    ctx.primaryDeviceQueueFamily = tmpQueueFamily;
+    ctx->secondaryPhysicalDevice = ctx->primaryPhysicalDevice;
+    ctx->secondaryDeviceProperties = ctx->primaryDeviceProperties;
+    ctx->secondaryDeviceQueueFamily = ctx->primaryDeviceQueueFamily;
+    ctx->primaryPhysicalDevice = tmpDevice;
+    ctx->primaryDeviceProperties = tmpProps;
+    ctx->primaryDeviceQueueFamily = tmpQueueFamily;
   }
 
 
@@ -433,7 +550,7 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   float priority = 1.0;
   VkDeviceQueueCreateInfo queueCreateInfo = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-      .queueFamilyIndex = ctx.primaryDeviceQueueFamily,
+      .queueFamilyIndex = ctx->primaryDeviceQueueFamily,
       .queueCount = 1,
       .pQueuePriorities = &priority,
   };
@@ -442,14 +559,14 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
       .pQueueCreateInfos = &queueCreateInfo,
       .queueCreateInfoCount = 1,
   };
-  err = vkCreateDevice(ctx.primaryPhysicalDevice, &deviceCreateInfo, NULL, &ctx.primaryDevice);
+  err = vkCreateDevice(ctx->primaryPhysicalDevice, &deviceCreateInfo, NULL, &ctx->primaryDevice);
   if (err) goto cleanup;
 
-  if (ctx.secondaryPhysicalDevice == ctx.primaryPhysicalDevice) {
-    ctx.secondaryDevice = ctx.primaryDevice;
+  if (ctx->secondaryPhysicalDevice == ctx->primaryPhysicalDevice) {
+    ctx->secondaryDevice = ctx->primaryDevice;
   } else {
-    queueCreateInfo.queueFamilyIndex = ctx.secondaryDeviceQueueFamily;
-    err = vkCreateDevice(ctx.secondaryPhysicalDevice, &deviceCreateInfo, NULL, &ctx.secondaryDevice);
+    queueCreateInfo.queueFamilyIndex = ctx->secondaryDeviceQueueFamily;
+    err = vkCreateDevice(ctx->secondaryPhysicalDevice, &deviceCreateInfo, NULL, &ctx->secondaryDevice);
     if (err) goto cleanup;
   }
 
@@ -459,16 +576,16 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   VkCommandPoolCreateInfo commandPoolCreateInfo = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-      .queueFamilyIndex = ctx.primaryDeviceQueueFamily,
+      .queueFamilyIndex = ctx->primaryDeviceQueueFamily,
   };
-  err = vkCreateCommandPool(ctx.primaryDevice, &commandPoolCreateInfo, NULL, &ctx.primaryCommandPool);
+  err = vkCreateCommandPool(ctx->primaryDevice, &commandPoolCreateInfo, NULL, &ctx->primaryCommandPool);
   if (err) goto cleanup;
 
-  if (ctx.secondaryDevice == ctx.primaryDevice) {
-    ctx.secondaryCommandPool = ctx.primaryCommandPool;
+  if (ctx->secondaryDevice == ctx->primaryDevice) {
+    ctx->secondaryCommandPool = ctx->primaryCommandPool;
   } else {
-    commandPoolCreateInfo.queueFamilyIndex = ctx.secondaryDeviceQueueFamily;
-    err = vkCreateCommandPool(ctx.secondaryDevice, &commandPoolCreateInfo, NULL, &ctx.secondaryCommandPool);
+    commandPoolCreateInfo.queueFamilyIndex = ctx->secondaryDeviceQueueFamily;
+    err = vkCreateCommandPool(ctx->secondaryDevice, &commandPoolCreateInfo, NULL, &ctx->secondaryCommandPool);
     if (err) goto cleanup;
   }
 
@@ -485,13 +602,13 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
     .poolSizeCount = 1,
     .pPoolSizes = &descriptorPoolSize,
   };
-  err = vkCreateDescriptorPool(ctx.primaryDevice, &descriptorPoolCreateInfo, NULL, &ctx.primaryDescriptorPool);
+  err = vkCreateDescriptorPool(ctx->primaryDevice, &descriptorPoolCreateInfo, NULL, &ctx->primaryDescriptorPool);
   if (err) goto cleanup;
 
-  if (ctx.secondaryDevice == ctx.primaryDevice) {
-    ctx.secondaryDescriptorPool = ctx.primaryDescriptorPool;
+  if (ctx->secondaryDevice == ctx->primaryDevice) {
+    ctx->secondaryDescriptorPool = ctx->primaryDescriptorPool;
   } else {
-    err = vkCreateDescriptorPool(ctx.secondaryDevice, &descriptorPoolCreateInfo, NULL, &ctx.secondaryDescriptorPool);
+    err = vkCreateDescriptorPool(ctx->secondaryDevice, &descriptorPoolCreateInfo, NULL, &ctx->secondaryDescriptorPool);
     if (err) goto cleanup;
   }
 
@@ -505,84 +622,84 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
   bufferCreateInfo.size = sizeof(CommonInputs);
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-  err = vkCreateBuffer(ctx.primaryDevice, &bufferCreateInfo, NULL, &ctx.primaryInputsBufferDeviceLocal);
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryInputsBufferDeviceLocal);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = sizeof(CommonInputs);
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-  err = vkCreateBuffer(ctx.primaryDevice, &bufferCreateInfo, NULL, &ctx.primaryInputsBufferHostVisible);
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryInputsBufferHostVisible);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = WOTS_CHAIN_BUFFER_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-  err = vkCreateBuffer(ctx.primaryDevice, &bufferCreateInfo, NULL, &ctx.primaryWotsChainBuffer);
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryWotsChainBuffer);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = XMSS_NODES_BUFFER_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-  err = vkCreateBuffer(ctx.primaryDevice, &bufferCreateInfo, NULL, &ctx.primaryXmssNodesBuffer);
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryXmssNodesBuffer);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = XMSS_MESSAGES_BUFFER_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-  err = vkCreateBuffer(ctx.primaryDevice, &bufferCreateInfo, NULL, &ctx.primaryXmssMessagesBuffer);
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryXmssMessagesBuffer);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = FORS_PUBKEY_STAGING_BUFFER_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-  err = vkCreateBuffer(ctx.primaryDevice, &bufferCreateInfo, NULL, &ctx.primaryForsPubkeyStagingBuffer);
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryForsPubkeyStagingBuffer);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = SLHVK_HYPERTREE_SIGNATURE_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-  err = vkCreateBuffer(ctx.primaryDevice, &bufferCreateInfo, NULL, &ctx.primaryHypertreeSignatureBufferDeviceLocal);
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryHypertreeSignatureBufferDeviceLocal);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = SLHVK_HYPERTREE_SIGNATURE_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-  err = vkCreateBuffer(ctx.primaryDevice, &bufferCreateInfo, NULL, &ctx.primaryHypertreeSignatureBufferHostVisible);
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryHypertreeSignatureBufferHostVisible);
   if (err) goto cleanup;
 
   /**** Secondary device buffers ****/
 
   bufferCreateInfo.size = sizeof(CommonInputs);
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-  err = vkCreateBuffer(ctx.secondaryDevice, &bufferCreateInfo, NULL, &ctx.secondaryInputsBufferDeviceLocal);
+  err = vkCreateBuffer(ctx->secondaryDevice, &bufferCreateInfo, NULL, &ctx->secondaryInputsBufferDeviceLocal);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = sizeof(CommonInputs);
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-  err = vkCreateBuffer(ctx.secondaryDevice, &bufferCreateInfo, NULL, &ctx.secondaryInputsBufferHostVisible);
+  err = vkCreateBuffer(ctx->secondaryDevice, &bufferCreateInfo, NULL, &ctx->secondaryInputsBufferHostVisible);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = FORS_MESSAGE_BUFFER_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-  err = vkCreateBuffer(ctx.secondaryDevice, &bufferCreateInfo, NULL, &ctx.secondaryForsMessageBufferDeviceLocal);
+  err = vkCreateBuffer(ctx->secondaryDevice, &bufferCreateInfo, NULL, &ctx->secondaryForsMessageBufferDeviceLocal);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = FORS_MESSAGE_BUFFER_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-  err = vkCreateBuffer(ctx.secondaryDevice, &bufferCreateInfo, NULL, &ctx.secondaryForsMessageBufferHostVisible);
+  err = vkCreateBuffer(ctx->secondaryDevice, &bufferCreateInfo, NULL, &ctx->secondaryForsMessageBufferHostVisible);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = FORS_NODES_BUFFER_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-  err = vkCreateBuffer(ctx.secondaryDevice, &bufferCreateInfo, NULL, &ctx.secondaryForsNodesBuffer);
+  err = vkCreateBuffer(ctx->secondaryDevice, &bufferCreateInfo, NULL, &ctx->secondaryForsNodesBuffer);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = SLHVK_FORS_SIGNATURE_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-  err = vkCreateBuffer(ctx.secondaryDevice, &bufferCreateInfo, NULL, &ctx.secondaryForsSignatureBufferDeviceLocal);
+  err = vkCreateBuffer(ctx->secondaryDevice, &bufferCreateInfo, NULL, &ctx->secondaryForsSignatureBufferDeviceLocal);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = SLHVK_FORS_SIGNATURE_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-  err = vkCreateBuffer(ctx.secondaryDevice, &bufferCreateInfo, NULL, &ctx.secondaryForsSignatureBufferHostVisible);
+  err = vkCreateBuffer(ctx->secondaryDevice, &bufferCreateInfo, NULL, &ctx->secondaryForsSignatureBufferHostVisible);
   if (err) goto cleanup;
 
   bufferCreateInfo.size = FORS_ROOTS_BUFFER_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-  err = vkCreateBuffer(ctx.secondaryDevice, &bufferCreateInfo, NULL, &ctx.secondaryForsRootsBuffer);
+  err = vkCreateBuffer(ctx->secondaryDevice, &bufferCreateInfo, NULL, &ctx->secondaryForsRootsBuffer);
   if (err) goto cleanup;
 
 
@@ -590,27 +707,27 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
   #define PRIMARY_DEVICE_LOCAL_BUFFER_COUNT 5
   VkBuffer primaryDeviceLocalBuffers[PRIMARY_DEVICE_LOCAL_BUFFER_COUNT] = {
-    ctx.primaryInputsBufferDeviceLocal,
-    ctx.primaryWotsChainBuffer,
-    ctx.primaryXmssNodesBuffer,
-    ctx.primaryXmssMessagesBuffer,
-    ctx.primaryHypertreeSignatureBufferDeviceLocal,
+    ctx->primaryInputsBufferDeviceLocal,
+    ctx->primaryWotsChainBuffer,
+    ctx->primaryXmssNodesBuffer,
+    ctx->primaryXmssMessagesBuffer,
+    ctx->primaryHypertreeSignatureBufferDeviceLocal,
   };
   VkDeviceMemory* primaryDeviceLocalMemories[PRIMARY_DEVICE_LOCAL_BUFFER_COUNT] = {
-    &ctx.primaryInputsBufferDeviceLocalMemory,
-    &ctx.primaryWotsChainBufferMemory,
-    &ctx.primaryXmssNodesBufferMemory,
-    &ctx.primaryXmssMessagesBufferMemory,
-    &ctx.primaryHypertreeSignatureBufferDeviceLocalMemory,
+    &ctx->primaryInputsBufferDeviceLocalMemory,
+    &ctx->primaryWotsChainBufferMemory,
+    &ctx->primaryXmssNodesBufferMemory,
+    &ctx->primaryXmssMessagesBufferMemory,
+    &ctx->primaryHypertreeSignatureBufferDeviceLocalMemory,
   };
 
   for (uint32_t i = 0; i < PRIMARY_DEVICE_LOCAL_BUFFER_COUNT; i++) {
     err = allocateBufferMemory(
-      ctx.primaryDevice,
-      ctx.primaryPhysicalDevice,
+      ctx->primaryDevice,
+      ctx->primaryPhysicalDevice,
       primaryDeviceLocalBuffers[i],
       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-      &ctx.primaryDeviceLocalMemoryFlags, // TODO: assumes buffers end up with the same memory type
+      &ctx->primaryDeviceLocalMemoryFlags, // TODO: assumes buffers end up with the same memory type
       primaryDeviceLocalMemories[i]
     );
     if (err) goto cleanup;
@@ -621,25 +738,25 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
   #define SECONDARY_DEVICE_LOCAL_BUFFER_COUNT 4
   VkBuffer secondaryDeviceLocalBuffers[SECONDARY_DEVICE_LOCAL_BUFFER_COUNT] = {
-    ctx.secondaryInputsBufferDeviceLocal,
-    ctx.secondaryForsMessageBufferDeviceLocal,
-    ctx.secondaryForsNodesBuffer,
-    ctx.secondaryForsSignatureBufferDeviceLocal,
+    ctx->secondaryInputsBufferDeviceLocal,
+    ctx->secondaryForsMessageBufferDeviceLocal,
+    ctx->secondaryForsNodesBuffer,
+    ctx->secondaryForsSignatureBufferDeviceLocal,
   };
   VkDeviceMemory* secondaryDeviceLocalMemories[SECONDARY_DEVICE_LOCAL_BUFFER_COUNT] = {
-    &ctx.secondaryInputsBufferDeviceLocalMemory,
-    &ctx.secondaryForsMessageBufferDeviceLocalMemory,
-    &ctx.secondaryForsNodesBufferMemory,
-    &ctx.secondaryForsSignatureBufferDeviceLocalMemory,
+    &ctx->secondaryInputsBufferDeviceLocalMemory,
+    &ctx->secondaryForsMessageBufferDeviceLocalMemory,
+    &ctx->secondaryForsNodesBufferMemory,
+    &ctx->secondaryForsSignatureBufferDeviceLocalMemory,
   };
 
   for (uint32_t i = 0; i < SECONDARY_DEVICE_LOCAL_BUFFER_COUNT; i++) {
     err = allocateBufferMemory(
-      ctx.secondaryDevice,
-      ctx.secondaryPhysicalDevice,
+      ctx->secondaryDevice,
+      ctx->secondaryPhysicalDevice,
       secondaryDeviceLocalBuffers[i],
       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-      &ctx.secondaryDeviceLocalMemoryFlags, // TODO: assumes buffers end up with the same memory type
+      &ctx->secondaryDeviceLocalMemoryFlags, // TODO: assumes buffers end up with the same memory type
       secondaryDeviceLocalMemories[i]
     );
     if (err) goto cleanup;
@@ -649,35 +766,35 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   /*******************  Allocate primary host visible memory  **********************/
 
   // Only allocate if device local memory isn't already host-visible.
-  if (!(ctx.primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+  if (!(ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
     err = allocateBufferMemory(
-      ctx.primaryDevice,
-      ctx.primaryPhysicalDevice,
-      ctx.primaryInputsBufferHostVisible,
+      ctx->primaryDevice,
+      ctx->primaryPhysicalDevice,
+      ctx->primaryInputsBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx.primaryDeviceHostVisibleMemoryFlags,
-      &ctx.primaryInputsBufferHostVisibleMemory
+      &ctx->primaryDeviceHostVisibleMemoryFlags,
+      &ctx->primaryInputsBufferHostVisibleMemory
     );
     if (err) goto cleanup;
 
     err = allocateBufferMemory(
-      ctx.primaryDevice,
-      ctx.primaryPhysicalDevice,
-      ctx.primaryHypertreeSignatureBufferHostVisible,
+      ctx->primaryDevice,
+      ctx->primaryPhysicalDevice,
+      ctx->primaryHypertreeSignatureBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx.primaryDeviceHostVisibleMemoryFlags,
-      &ctx.primaryHypertreeSignatureBufferHostVisibleMemory
+      &ctx->primaryDeviceHostVisibleMemoryFlags,
+      &ctx->primaryHypertreeSignatureBufferHostVisibleMemory
     );
     if (err) goto cleanup;
   }
 
   err = allocateBufferMemory(
-    ctx.primaryDevice,
-    ctx.primaryPhysicalDevice,
-    ctx.primaryForsPubkeyStagingBuffer,
+    ctx->primaryDevice,
+    ctx->primaryPhysicalDevice,
+    ctx->primaryForsPubkeyStagingBuffer,
     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-    &ctx.primaryDeviceHostVisibleMemoryFlags,
-    &ctx.primaryForsPubkeyStagingBufferMemory
+    &ctx->primaryDeviceHostVisibleMemoryFlags,
+    &ctx->primaryForsPubkeyStagingBufferMemory
   );
   if (err) goto cleanup;
 
@@ -685,45 +802,45 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   /*******************  Allocate secondary host visible memory  **********************/
 
   // Only allocate if device local memory isn't already host-visible.
-  if (!(ctx.secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+  if (!(ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
     err = allocateBufferMemory(
-      ctx.secondaryDevice,
-      ctx.secondaryPhysicalDevice,
-      ctx.secondaryInputsBufferHostVisible,
+      ctx->secondaryDevice,
+      ctx->secondaryPhysicalDevice,
+      ctx->secondaryInputsBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx.secondaryDeviceHostVisibleMemoryFlags,
-      &ctx.secondaryInputsBufferHostVisibleMemory
+      &ctx->secondaryDeviceHostVisibleMemoryFlags,
+      &ctx->secondaryInputsBufferHostVisibleMemory
     );
     if (err) goto cleanup;
 
     err = allocateBufferMemory(
-      ctx.secondaryDevice,
-      ctx.secondaryPhysicalDevice,
-      ctx.secondaryForsMessageBufferHostVisible,
+      ctx->secondaryDevice,
+      ctx->secondaryPhysicalDevice,
+      ctx->secondaryForsMessageBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx.secondaryDeviceHostVisibleMemoryFlags,
-      &ctx.secondaryForsMessageBufferHostVisibleMemory
+      &ctx->secondaryDeviceHostVisibleMemoryFlags,
+      &ctx->secondaryForsMessageBufferHostVisibleMemory
     );
     if (err) goto cleanup;
 
     err = allocateBufferMemory(
-      ctx.secondaryDevice,
-      ctx.secondaryPhysicalDevice,
-      ctx.secondaryForsSignatureBufferHostVisible,
+      ctx->secondaryDevice,
+      ctx->secondaryPhysicalDevice,
+      ctx->secondaryForsSignatureBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx.secondaryDeviceHostVisibleMemoryFlags,
-      &ctx.secondaryForsSignatureBufferHostVisibleMemory
+      &ctx->secondaryDeviceHostVisibleMemoryFlags,
+      &ctx->secondaryForsSignatureBufferHostVisibleMemory
     );
     if (err) goto cleanup;
   }
 
   err = allocateBufferMemory(
-    ctx.secondaryDevice,
-    ctx.secondaryPhysicalDevice,
-    ctx.secondaryForsRootsBuffer,
+    ctx->secondaryDevice,
+    ctx->secondaryPhysicalDevice,
+    ctx->secondaryForsRootsBuffer,
     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-    &ctx.secondaryDeviceHostVisibleMemoryFlags,
-    &ctx.secondaryForsRootsBufferMemory
+    &ctx->secondaryDeviceHostVisibleMemoryFlags,
+    &ctx->secondaryForsRootsBufferMemory
   );
   if (err) goto cleanup;
 
@@ -731,44 +848,44 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   /*******************  Define descriptor set layouts  **********************/
 
   err = setupDescriptorSetLayout(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     WOTS_TIPS_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT,
-    &ctx.wotsTipsPrecomputeDescriptorSetLayout
+    &ctx->wotsTipsPrecomputeDescriptorSetLayout
   );
   if (err) goto cleanup;
 
   err = setupDescriptorSetLayout(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     XMSS_LEAVES_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT,
-    &ctx.xmssLeavesPrecomputeDescriptorSetLayout
+    &ctx->xmssLeavesPrecomputeDescriptorSetLayout
   );
   if (err) goto cleanup;
 
   err = setupDescriptorSetLayout(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     XMSS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT,
-    &ctx.xmssMerkleSignDescriptorSetLayout
+    &ctx->xmssMerkleSignDescriptorSetLayout
   );
   if (err) goto cleanup;
 
   err = setupDescriptorSetLayout(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     WOTS_SIGN_PIPELINE_DESCRIPTOR_COUNT,
-    &ctx.wotsSignDescriptorSetLayout
+    &ctx->wotsSignDescriptorSetLayout
   );
   if (err) goto cleanup;
 
   err = setupDescriptorSetLayout(
-    ctx.secondaryDevice,
+    ctx->secondaryDevice,
     FORS_LEAVES_GEN_PIPELINE_DESCRIPTOR_COUNT,
-    &ctx.forsLeavesGenDescriptorSetLayout
+    &ctx->forsLeavesGenDescriptorSetLayout
   );
   if (err) goto cleanup;
 
   err = setupDescriptorSetLayout(
-    ctx.secondaryDevice,
+    ctx->secondaryDevice,
     FORS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT,
-    &ctx.forsMerkleSignDescriptorSetLayout
+    &ctx->forsMerkleSignDescriptorSetLayout
   );
   if (err) goto cleanup;
 
@@ -780,57 +897,57 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
     .setLayoutCount = 1,
   };
 
-  pipelineLayoutCreateInfo.pSetLayouts = &ctx.wotsTipsPrecomputeDescriptorSetLayout,
+  pipelineLayoutCreateInfo.pSetLayouts = &ctx->wotsTipsPrecomputeDescriptorSetLayout,
   err = vkCreatePipelineLayout(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     &pipelineLayoutCreateInfo,
     NULL,
-    &ctx.wotsTipsPrecomputePipelineLayout
+    &ctx->wotsTipsPrecomputePipelineLayout
   );
   if (err) goto cleanup;
 
-  pipelineLayoutCreateInfo.pSetLayouts = &ctx.xmssLeavesPrecomputeDescriptorSetLayout,
+  pipelineLayoutCreateInfo.pSetLayouts = &ctx->xmssLeavesPrecomputeDescriptorSetLayout,
   err = vkCreatePipelineLayout(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     &pipelineLayoutCreateInfo,
     NULL,
-    &ctx.xmssLeavesPrecomputePipelineLayout
+    &ctx->xmssLeavesPrecomputePipelineLayout
   );
   if (err) goto cleanup;
 
-  pipelineLayoutCreateInfo.pSetLayouts = &ctx.xmssMerkleSignDescriptorSetLayout,
+  pipelineLayoutCreateInfo.pSetLayouts = &ctx->xmssMerkleSignDescriptorSetLayout,
   err = vkCreatePipelineLayout(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     &pipelineLayoutCreateInfo,
     NULL,
-    &ctx.xmssMerkleSignPipelineLayout
+    &ctx->xmssMerkleSignPipelineLayout
   );
   if (err) goto cleanup;
 
-  pipelineLayoutCreateInfo.pSetLayouts = &ctx.wotsSignDescriptorSetLayout,
+  pipelineLayoutCreateInfo.pSetLayouts = &ctx->wotsSignDescriptorSetLayout,
   err = vkCreatePipelineLayout(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     &pipelineLayoutCreateInfo,
     NULL,
-    &ctx.wotsSignPipelineLayout
+    &ctx->wotsSignPipelineLayout
   );
   if (err) goto cleanup;
 
-  pipelineLayoutCreateInfo.pSetLayouts = &ctx.forsLeavesGenDescriptorSetLayout,
+  pipelineLayoutCreateInfo.pSetLayouts = &ctx->forsLeavesGenDescriptorSetLayout,
   err = vkCreatePipelineLayout(
-    ctx.secondaryDevice,
+    ctx->secondaryDevice,
     &pipelineLayoutCreateInfo,
     NULL,
-    &ctx.forsLeavesGenPipelineLayout
+    &ctx->forsLeavesGenPipelineLayout
   );
   if (err) goto cleanup;
 
-  pipelineLayoutCreateInfo.pSetLayouts = &ctx.forsMerkleSignDescriptorSetLayout,
+  pipelineLayoutCreateInfo.pSetLayouts = &ctx->forsMerkleSignDescriptorSetLayout,
   err = vkCreatePipelineLayout(
-    ctx.secondaryDevice,
+    ctx->secondaryDevice,
     &pipelineLayoutCreateInfo,
     NULL,
-    &ctx.forsMerkleSignPipelineLayout
+    &ctx->forsMerkleSignPipelineLayout
   );
   if (err) goto cleanup;
 
@@ -839,116 +956,116 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
   VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {
     .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-    .descriptorPool = ctx.primaryDescriptorPool, // pool to allocate from.
+    .descriptorPool = ctx->primaryDescriptorPool, // pool to allocate from.
     .descriptorSetCount = 1,                     // allocate a single descriptor set per pipeline.
   };
 
-  descriptorSetAllocateInfo.pSetLayouts = &ctx.wotsTipsPrecomputeDescriptorSetLayout;
-  err = vkAllocateDescriptorSets(ctx.primaryDevice, &descriptorSetAllocateInfo, &ctx.wotsTipsPrecomputeDescriptorSet);
+  descriptorSetAllocateInfo.pSetLayouts = &ctx->wotsTipsPrecomputeDescriptorSetLayout;
+  err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->wotsTipsPrecomputeDescriptorSet);
   if (err) goto cleanup;
 
-  descriptorSetAllocateInfo.pSetLayouts = &ctx.xmssLeavesPrecomputeDescriptorSetLayout;
-  err = vkAllocateDescriptorSets(ctx.primaryDevice, &descriptorSetAllocateInfo, &ctx.xmssLeavesPrecomputeDescriptorSet);
+  descriptorSetAllocateInfo.pSetLayouts = &ctx->xmssLeavesPrecomputeDescriptorSetLayout;
+  err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->xmssLeavesPrecomputeDescriptorSet);
   if (err) goto cleanup;
 
-  descriptorSetAllocateInfo.pSetLayouts = &ctx.xmssMerkleSignDescriptorSetLayout;
-  err = vkAllocateDescriptorSets(ctx.primaryDevice, &descriptorSetAllocateInfo, &ctx.xmssMerkleSignDescriptorSet);
+  descriptorSetAllocateInfo.pSetLayouts = &ctx->xmssMerkleSignDescriptorSetLayout;
+  err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->xmssMerkleSignDescriptorSet);
   if (err) goto cleanup;
 
-  descriptorSetAllocateInfo.pSetLayouts = &ctx.wotsSignDescriptorSetLayout;
-  err = vkAllocateDescriptorSets(ctx.primaryDevice, &descriptorSetAllocateInfo, &ctx.wotsSignDescriptorSet);
+  descriptorSetAllocateInfo.pSetLayouts = &ctx->wotsSignDescriptorSetLayout;
+  err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->wotsSignDescriptorSet);
   if (err) goto cleanup;
 
 
   /*******************  Allocate secondary descriptor sets  **********************/
 
-  descriptorSetAllocateInfo.descriptorPool = ctx.secondaryDescriptorPool;
+  descriptorSetAllocateInfo.descriptorPool = ctx->secondaryDescriptorPool;
 
-  descriptorSetAllocateInfo.pSetLayouts = &ctx.forsLeavesGenDescriptorSetLayout;
-  err = vkAllocateDescriptorSets(ctx.secondaryDevice, &descriptorSetAllocateInfo, &ctx.forsLeavesGenDescriptorSet);
+  descriptorSetAllocateInfo.pSetLayouts = &ctx->forsLeavesGenDescriptorSetLayout;
+  err = vkAllocateDescriptorSets(ctx->secondaryDevice, &descriptorSetAllocateInfo, &ctx->forsLeavesGenDescriptorSet);
   if (err) goto cleanup;
 
-  descriptorSetAllocateInfo.pSetLayouts = &ctx.forsMerkleSignDescriptorSetLayout;
-  err = vkAllocateDescriptorSets(ctx.secondaryDevice, &descriptorSetAllocateInfo, &ctx.forsMerkleSignDescriptorSet);
+  descriptorSetAllocateInfo.pSetLayouts = &ctx->forsMerkleSignDescriptorSetLayout;
+  err = vkAllocateDescriptorSets(ctx->secondaryDevice, &descriptorSetAllocateInfo, &ctx->forsMerkleSignDescriptorSet);
   if (err) goto cleanup;
 
 
   /*******************  Bind primary device buffers to descriptor sets  **********************/
 
   VkBuffer wotsTipsPrecomputeBuffers[WOTS_TIPS_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT] = {
-    ctx.primaryInputsBufferDeviceLocal,
-    ctx.primaryWotsChainBuffer,
+    ctx->primaryInputsBufferDeviceLocal,
+    ctx->primaryWotsChainBuffer,
   };
   bindBuffersToDescriptorSet(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     wotsTipsPrecomputeBuffers,
     WOTS_TIPS_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT,
-    ctx.wotsTipsPrecomputeDescriptorSet
+    ctx->wotsTipsPrecomputeDescriptorSet
   );
 
   VkBuffer xmssLeavesPrecomputeBuffers[XMSS_LEAVES_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT] = {
-    ctx.primaryInputsBufferDeviceLocal,
-    ctx.primaryWotsChainBuffer,
-    ctx.primaryXmssNodesBuffer,
+    ctx->primaryInputsBufferDeviceLocal,
+    ctx->primaryWotsChainBuffer,
+    ctx->primaryXmssNodesBuffer,
   };
   bindBuffersToDescriptorSet(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     xmssLeavesPrecomputeBuffers,
     XMSS_LEAVES_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT,
-    ctx.xmssLeavesPrecomputeDescriptorSet
+    ctx->xmssLeavesPrecomputeDescriptorSet
   );
 
   VkBuffer xmssMerkleSignBuffers[XMSS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT] = {
-    ctx.primaryInputsBufferDeviceLocal,
-    ctx.primaryXmssNodesBuffer,
-    ctx.primaryHypertreeSignatureBufferDeviceLocal,
-    ctx.primaryXmssMessagesBuffer,
+    ctx->primaryInputsBufferDeviceLocal,
+    ctx->primaryXmssNodesBuffer,
+    ctx->primaryHypertreeSignatureBufferDeviceLocal,
+    ctx->primaryXmssMessagesBuffer,
   };
   bindBuffersToDescriptorSet(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     xmssMerkleSignBuffers,
     XMSS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT,
-    ctx.xmssMerkleSignDescriptorSet
+    ctx->xmssMerkleSignDescriptorSet
   );
 
   VkBuffer wotsSignBuffers[WOTS_SIGN_PIPELINE_DESCRIPTOR_COUNT] = {
-    ctx.primaryInputsBufferDeviceLocal,
-    ctx.primaryHypertreeSignatureBufferDeviceLocal,
-    ctx.primaryXmssMessagesBuffer,
+    ctx->primaryInputsBufferDeviceLocal,
+    ctx->primaryHypertreeSignatureBufferDeviceLocal,
+    ctx->primaryXmssMessagesBuffer,
   };
   bindBuffersToDescriptorSet(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     wotsSignBuffers,
     WOTS_SIGN_PIPELINE_DESCRIPTOR_COUNT,
-    ctx.wotsSignDescriptorSet
+    ctx->wotsSignDescriptorSet
   );
 
   /*******************  Bind secondary device buffers to descriptor sets  **********************/
 
   VkBuffer forsLeavesGenBuffers[FORS_LEAVES_GEN_PIPELINE_DESCRIPTOR_COUNT] = {
-    ctx.secondaryInputsBufferDeviceLocal,
-    ctx.secondaryForsMessageBufferDeviceLocal,
-    ctx.secondaryForsNodesBuffer,
-    ctx.secondaryForsSignatureBufferDeviceLocal,
+    ctx->secondaryInputsBufferDeviceLocal,
+    ctx->secondaryForsMessageBufferDeviceLocal,
+    ctx->secondaryForsNodesBuffer,
+    ctx->secondaryForsSignatureBufferDeviceLocal,
   };
   bindBuffersToDescriptorSet(
-    ctx.secondaryDevice,
+    ctx->secondaryDevice,
     forsLeavesGenBuffers,
     FORS_LEAVES_GEN_PIPELINE_DESCRIPTOR_COUNT,
-    ctx.forsLeavesGenDescriptorSet
+    ctx->forsLeavesGenDescriptorSet
   );
 
   VkBuffer forsMerkleSignBuffers[FORS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT] = {
-    ctx.secondaryInputsBufferDeviceLocal,
-    ctx.secondaryForsMessageBufferDeviceLocal,
-    ctx.secondaryForsNodesBuffer,
-    ctx.secondaryForsSignatureBufferDeviceLocal,
+    ctx->secondaryInputsBufferDeviceLocal,
+    ctx->secondaryForsMessageBufferDeviceLocal,
+    ctx->secondaryForsNodesBuffer,
+    ctx->secondaryForsSignatureBufferDeviceLocal,
   };
   bindBuffersToDescriptorSet(
-    ctx.secondaryDevice,
+    ctx->secondaryDevice,
     forsMerkleSignBuffers,
     FORS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT,
-    ctx.forsMerkleSignDescriptorSet
+    ctx->forsMerkleSignDescriptorSet
   );
 
   /*******************  Build shader modules  **********************/
@@ -959,32 +1076,32 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
   shaderCreateInfo.pCode = (uint32_t*) wots_tips_precompute_spv,
   shaderCreateInfo.codeSize = wots_tips_precompute_spv_len,
-  err = vkCreateShaderModule(ctx.primaryDevice, &shaderCreateInfo, NULL, &ctx.wotsTipsPrecomputeShader);
+  err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->wotsTipsPrecomputeShader);
   if (err) goto cleanup;
 
   shaderCreateInfo.pCode = (uint32_t*) xmss_leaves_precompute_spv,
   shaderCreateInfo.codeSize = xmss_leaves_precompute_spv_len,
-  err = vkCreateShaderModule(ctx.primaryDevice, &shaderCreateInfo, NULL, &ctx.xmssLeavesPrecomputeShader);
+  err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->xmssLeavesPrecomputeShader);
   if (err) goto cleanup;
 
   shaderCreateInfo.pCode = (uint32_t*) xmss_merkle_sign_spv,
   shaderCreateInfo.codeSize = xmss_merkle_sign_spv_len,
-  err = vkCreateShaderModule(ctx.primaryDevice, &shaderCreateInfo, NULL, &ctx.xmssMerkleSignShader);
+  err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->xmssMerkleSignShader);
   if (err) goto cleanup;
 
   shaderCreateInfo.pCode = (uint32_t*) wots_sign_spv,
   shaderCreateInfo.codeSize = wots_sign_spv_len,
-  err = vkCreateShaderModule(ctx.primaryDevice, &shaderCreateInfo, NULL, &ctx.wotsSignShader);
+  err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->wotsSignShader);
   if (err) goto cleanup;
 
   shaderCreateInfo.pCode = (uint32_t*) fors_leaves_gen_spv,
   shaderCreateInfo.codeSize = fors_leaves_gen_spv_len,
-  err = vkCreateShaderModule(ctx.secondaryDevice, &shaderCreateInfo, NULL, &ctx.forsLeavesGenShader);
+  err = vkCreateShaderModule(ctx->secondaryDevice, &shaderCreateInfo, NULL, &ctx->forsLeavesGenShader);
   if (err) goto cleanup;
 
   shaderCreateInfo.pCode = (uint32_t*) fors_merkle_sign_spv,
   shaderCreateInfo.codeSize = fors_merkle_sign_spv_len,
-  err = vkCreateShaderModule(ctx.secondaryDevice, &shaderCreateInfo, NULL, &ctx.forsMerkleSignShader);
+  err = vkCreateShaderModule(ctx->secondaryDevice, &shaderCreateInfo, NULL, &ctx->forsMerkleSignShader);
   if (err) goto cleanup;
 
 
@@ -1031,75 +1148,75 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
     .stage = shaderStageCreateInfo,
   };
 
-  pipelineCreateInfo.stage.module = ctx.wotsTipsPrecomputeShader;
-  pipelineCreateInfo.layout       = ctx.wotsTipsPrecomputePipelineLayout;
+  pipelineCreateInfo.stage.module = ctx->wotsTipsPrecomputeShader;
+  pipelineCreateInfo.layout       = ctx->wotsTipsPrecomputePipelineLayout;
   err = vkCreateComputePipelines(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     VK_NULL_HANDLE, // pipeline cache, TODO
     1,
     &pipelineCreateInfo,
     NULL,
-    &ctx.wotsTipsPrecomputePipeline
+    &ctx->wotsTipsPrecomputePipeline
   );
   if (err) goto cleanup;
 
-  pipelineCreateInfo.stage.module = ctx.xmssLeavesPrecomputeShader;
-  pipelineCreateInfo.layout       = ctx.xmssLeavesPrecomputePipelineLayout;
+  pipelineCreateInfo.stage.module = ctx->xmssLeavesPrecomputeShader;
+  pipelineCreateInfo.layout       = ctx->xmssLeavesPrecomputePipelineLayout;
   err = vkCreateComputePipelines(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     VK_NULL_HANDLE, // pipeline cache, TODO
     1,
     &pipelineCreateInfo,
     NULL,
-    &ctx.xmssLeavesPrecomputePipeline
+    &ctx->xmssLeavesPrecomputePipeline
   );
   if (err) goto cleanup;
 
-  pipelineCreateInfo.stage.module = ctx.xmssMerkleSignShader;
-  pipelineCreateInfo.layout       = ctx.xmssMerkleSignPipelineLayout;
+  pipelineCreateInfo.stage.module = ctx->xmssMerkleSignShader;
+  pipelineCreateInfo.layout       = ctx->xmssMerkleSignPipelineLayout;
   err = vkCreateComputePipelines(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     VK_NULL_HANDLE, // pipeline cache, TODO
     1,
     &pipelineCreateInfo,
     NULL,
-    &ctx.xmssMerkleSignPipeline
+    &ctx->xmssMerkleSignPipeline
   );
   if (err) goto cleanup;
 
-  pipelineCreateInfo.stage.module = ctx.wotsSignShader;
-  pipelineCreateInfo.layout       = ctx.wotsSignPipelineLayout;
+  pipelineCreateInfo.stage.module = ctx->wotsSignShader;
+  pipelineCreateInfo.layout       = ctx->wotsSignPipelineLayout;
   err = vkCreateComputePipelines(
-    ctx.primaryDevice,
+    ctx->primaryDevice,
     VK_NULL_HANDLE, // pipeline cache, TODO
     1,
     &pipelineCreateInfo,
     NULL,
-    &ctx.wotsSignPipeline
+    &ctx->wotsSignPipeline
   );
   if (err) goto cleanup;
 
-  pipelineCreateInfo.stage.module = ctx.forsLeavesGenShader;
-  pipelineCreateInfo.layout       = ctx.forsLeavesGenPipelineLayout;
+  pipelineCreateInfo.stage.module = ctx->forsLeavesGenShader;
+  pipelineCreateInfo.layout       = ctx->forsLeavesGenPipelineLayout;
   err = vkCreateComputePipelines(
-    ctx.secondaryDevice,
+    ctx->secondaryDevice,
     VK_NULL_HANDLE, // pipeline cache, TODO
     1,
     &pipelineCreateInfo,
     NULL,
-    &ctx.forsLeavesGenPipeline
+    &ctx->forsLeavesGenPipeline
   );
   if (err) goto cleanup;
 
-  pipelineCreateInfo.stage.module = ctx.forsMerkleSignShader;
-  pipelineCreateInfo.layout       = ctx.forsMerkleSignPipelineLayout;
+  pipelineCreateInfo.stage.module = ctx->forsMerkleSignShader;
+  pipelineCreateInfo.layout       = ctx->forsMerkleSignPipelineLayout;
   err = vkCreateComputePipelines(
-    ctx.secondaryDevice,
+    ctx->secondaryDevice,
     VK_NULL_HANDLE, // pipeline cache, TODO
     1,
     &pipelineCreateInfo,
     NULL,
-    &ctx.forsMerkleSignPipeline
+    &ctx->forsMerkleSignPipeline
   );
   if (err) goto cleanup;
 
@@ -1109,23 +1226,23 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   #define PRIMARY_COMMAND_BUFFER_COUNT 2
   VkCommandBufferAllocateInfo cmdBufAllocInfo = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-    .commandPool = ctx.primaryCommandPool,
+    .commandPool = ctx->primaryCommandPool,
     .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
     .commandBufferCount = PRIMARY_COMMAND_BUFFER_COUNT,
   };
   VkCommandBuffer primaryCmdBufs[PRIMARY_COMMAND_BUFFER_COUNT];
-  err = vkAllocateCommandBuffers(ctx.primaryDevice, &cmdBufAllocInfo, primaryCmdBufs);
+  err = vkAllocateCommandBuffers(ctx->primaryDevice, &cmdBufAllocInfo, primaryCmdBufs);
   if (err) goto cleanup;
 
-  ctx.primaryHypertreePresignCommandBuffer = primaryCmdBufs[0];
-  ctx.primaryHypertreeFinishCommandBuffer  = primaryCmdBufs[1];
+  ctx->primaryHypertreePresignCommandBuffer = primaryCmdBufs[0];
+  ctx->primaryHypertreeFinishCommandBuffer  = primaryCmdBufs[1];
 
 
   /*****************  Create secondary device command buffers ******************/
 
-  cmdBufAllocInfo.commandPool = ctx.secondaryCommandPool;
+  cmdBufAllocInfo.commandPool = ctx->secondaryCommandPool;
   cmdBufAllocInfo.commandBufferCount = 1;
-  err = vkAllocateCommandBuffers(ctx.secondaryDevice, &cmdBufAllocInfo, &ctx.secondaryForsCommandBuffer);
+  err = vkAllocateCommandBuffers(ctx->secondaryDevice, &cmdBufAllocInfo, &ctx->secondaryForsCommandBuffer);
   if (err) goto cleanup;
 
 
@@ -1134,16 +1251,16 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   VkCommandBufferBeginInfo cmdBufBeginInfo = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
   };
-  err = vkBeginCommandBuffer(ctx.primaryHypertreePresignCommandBuffer, &cmdBufBeginInfo);
+  err = vkBeginCommandBuffer(ctx->primaryHypertreePresignCommandBuffer, &cmdBufBeginInfo);
   if (err) goto cleanup;
 
   // Copy from a host-visible buffer if the device-local buffer isn't also host-visible.
-  if ((ctx.primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
+  if ((ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = sizeof(CommonInputs) };
     vkCmdCopyBuffer(
-      ctx.primaryHypertreePresignCommandBuffer,
-      ctx.primaryInputsBufferHostVisible, // src
-      ctx.primaryInputsBufferDeviceLocal, // dest
+      ctx->primaryHypertreePresignCommandBuffer,
+      ctx->primaryInputsBufferHostVisible, // src
+      ctx->primaryInputsBufferDeviceLocal, // dest
       1, // region count
       &regions // regions
     );
@@ -1151,22 +1268,22 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
   // Bind and dispatch the WOTS tips precompute shader.
   vkCmdBindPipeline(
-    ctx.primaryHypertreePresignCommandBuffer,
+    ctx->primaryHypertreePresignCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx.wotsTipsPrecomputePipeline
+    ctx->wotsTipsPrecomputePipeline
   );
   vkCmdBindDescriptorSets(
-    ctx.primaryHypertreePresignCommandBuffer,
+    ctx->primaryHypertreePresignCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx.wotsTipsPrecomputePipelineLayout,
+    ctx->wotsTipsPrecomputePipelineLayout,
     0, // set number of first descriptor_set to be bound
     1, // number of descriptor sets
-    &ctx.wotsTipsPrecomputeDescriptorSet,
+    &ctx->wotsTipsPrecomputeDescriptorSet,
     0,  // offset count
     NULL // offsets array
   );
   vkCmdDispatch(
-    ctx.primaryHypertreePresignCommandBuffer,
+    ctx->primaryHypertreePresignCommandBuffer,
     numWorkGroups(SLHVK_HYPERTREE_LAYERS * SLHVK_XMSS_LEAVES * SLHVK_WOTS_CHAIN_COUNT),
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
@@ -1180,7 +1297,7 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
     .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
   };
   vkCmdPipelineBarrier(
-    ctx.primaryHypertreePresignCommandBuffer,
+    ctx->primaryHypertreePresignCommandBuffer,
     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
     0, // flags
@@ -1191,22 +1308,22 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
   // Bind and dispatch the XMSS leaves precompute shader.
   vkCmdBindPipeline(
-    ctx.primaryHypertreePresignCommandBuffer,
+    ctx->primaryHypertreePresignCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx.xmssLeavesPrecomputePipeline
+    ctx->xmssLeavesPrecomputePipeline
   );
   vkCmdBindDescriptorSets(
-    ctx.primaryHypertreePresignCommandBuffer,
+    ctx->primaryHypertreePresignCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx.xmssLeavesPrecomputePipelineLayout,
+    ctx->xmssLeavesPrecomputePipelineLayout,
     0, // set number of first descriptor_set to be bound
     1, // number of descriptor sets
-    &ctx.xmssLeavesPrecomputeDescriptorSet,
+    &ctx->xmssLeavesPrecomputeDescriptorSet,
     0,  // offset count
     NULL // offsets array
   );
   vkCmdDispatch(
-    ctx.primaryHypertreePresignCommandBuffer,
+    ctx->primaryHypertreePresignCommandBuffer,
     numWorkGroups(SLHVK_HYPERTREE_LAYERS * SLHVK_XMSS_LEAVES),
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
@@ -1221,7 +1338,7 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
     .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
   };
   vkCmdPipelineBarrier(
-    ctx.primaryHypertreePresignCommandBuffer,
+    ctx->primaryHypertreePresignCommandBuffer,
     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
     0, // flags
@@ -1232,52 +1349,52 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
   // Bind and dispatch the XMSS merkle sign precompute shader.
   vkCmdBindPipeline(
-    ctx.primaryHypertreePresignCommandBuffer,
+    ctx->primaryHypertreePresignCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx.xmssMerkleSignPipeline
+    ctx->xmssMerkleSignPipeline
   );
   vkCmdBindDescriptorSets(
-    ctx.primaryHypertreePresignCommandBuffer,
+    ctx->primaryHypertreePresignCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx.xmssMerkleSignPipelineLayout,
+    ctx->xmssMerkleSignPipelineLayout,
     0, // set number of first descriptor_set to be bound
     1, // number of descriptor sets
-    &ctx.xmssMerkleSignDescriptorSet,
+    &ctx->xmssMerkleSignDescriptorSet,
     0,  // offset count
     NULL // offsets array
   );
   vkCmdDispatch(
-    ctx.primaryHypertreePresignCommandBuffer,
+    ctx->primaryHypertreePresignCommandBuffer,
     SLHVK_HYPERTREE_LAYERS, // One work group per XMSS tree
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
   );
 
-  err = vkEndCommandBuffer(ctx.primaryHypertreePresignCommandBuffer);
+  err = vkEndCommandBuffer(ctx->primaryHypertreePresignCommandBuffer);
   if (err) goto cleanup;
 
 
   /**************  Fill the secondary command buffer *****************/
 
-  err = vkBeginCommandBuffer(ctx.secondaryForsCommandBuffer, &cmdBufBeginInfo);
+  err = vkBeginCommandBuffer(ctx->secondaryForsCommandBuffer, &cmdBufBeginInfo);
   if (err) goto cleanup;
 
   // Copy from host-visible buffers if the device-local buffer isn't also host-visible.
-  if ((ctx.secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
+  if ((ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = sizeof(CommonInputs) };
     vkCmdCopyBuffer(
-      ctx.secondaryForsCommandBuffer,
-      ctx.secondaryInputsBufferHostVisible, // src
-      ctx.secondaryInputsBufferDeviceLocal, // dest
+      ctx->secondaryForsCommandBuffer,
+      ctx->secondaryInputsBufferHostVisible, // src
+      ctx->secondaryInputsBufferDeviceLocal, // dest
       1, // region count
       &regions // regions
     );
 
     regions.size = FORS_MESSAGE_BUFFER_SIZE;
     vkCmdCopyBuffer(
-      ctx.secondaryForsCommandBuffer,
-      ctx.secondaryForsMessageBufferHostVisible, // src
-      ctx.secondaryForsMessageBufferDeviceLocal, // dest
+      ctx->secondaryForsCommandBuffer,
+      ctx->secondaryForsMessageBufferHostVisible, // src
+      ctx->secondaryForsMessageBufferDeviceLocal, // dest
       1, // region count
       &regions // regions
     );
@@ -1285,22 +1402,22 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
   // Bind and dispatch the FORS leaves gen shader.
   vkCmdBindPipeline(
-    ctx.secondaryForsCommandBuffer,
+    ctx->secondaryForsCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx.forsLeavesGenPipeline
+    ctx->forsLeavesGenPipeline
   );
   vkCmdBindDescriptorSets(
-    ctx.secondaryForsCommandBuffer,
+    ctx->secondaryForsCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx.forsLeavesGenPipelineLayout,
+    ctx->forsLeavesGenPipelineLayout,
     0, // set number of first descriptor_set to be bound
     1, // number of descriptor sets
-    &ctx.forsLeavesGenDescriptorSet,
+    &ctx->forsLeavesGenDescriptorSet,
     0,  // offset count
     NULL // offsets array
   );
   vkCmdDispatch(
-    ctx.secondaryForsCommandBuffer,
+    ctx->secondaryForsCommandBuffer,
     numWorkGroups(SLHVK_FORS_TREE_COUNT * SLHVK_FORS_LEAVES_COUNT), // One thread per FORS leaf node
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
@@ -1314,7 +1431,7 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
     .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
   };
   vkCmdPipelineBarrier(
-    ctx.secondaryForsCommandBuffer,
+    ctx->secondaryForsCommandBuffer,
     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
     0, // flags
@@ -1325,34 +1442,34 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
   // Bind and dispatch the FORS merkle sign shader.
   vkCmdBindPipeline(
-    ctx.secondaryForsCommandBuffer,
+    ctx->secondaryForsCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx.forsMerkleSignPipeline
+    ctx->forsMerkleSignPipeline
   );
   vkCmdBindDescriptorSets(
-    ctx.secondaryForsCommandBuffer,
+    ctx->secondaryForsCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx.forsMerkleSignPipelineLayout,
+    ctx->forsMerkleSignPipelineLayout,
     0, // set number of first descriptor_set to be bound
     1, // number of descriptor sets
-    &ctx.forsMerkleSignDescriptorSet,
+    &ctx->forsMerkleSignDescriptorSet,
     0,  // offset count
     NULL // offsets array
   );
   vkCmdDispatch(
-    ctx.secondaryForsCommandBuffer,
+    ctx->secondaryForsCommandBuffer,
     SLHVK_FORS_TREE_COUNT, // One work group per FORS tree
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
   );
 
   // Copy to host-visible buffer if the device-local buffer isn't also host-visible.
-  if ((ctx.secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
+  if ((ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = SLHVK_FORS_SIGNATURE_SIZE };
     vkCmdCopyBuffer(
-      ctx.secondaryForsCommandBuffer,
-      ctx.secondaryForsSignatureBufferDeviceLocal, // src
-      ctx.secondaryForsSignatureBufferHostVisible, // dest
+      ctx->secondaryForsCommandBuffer,
+      ctx->secondaryForsSignatureBufferDeviceLocal, // src
+      ctx->secondaryForsSignatureBufferHostVisible, // dest
       1, // region count
       &regions // regions
     );
@@ -1368,20 +1485,20 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
     };
   }
   vkCmdCopyBuffer(
-    ctx.secondaryForsCommandBuffer,
-    ctx.secondaryForsNodesBuffer, // src
-    ctx.secondaryForsRootsBuffer, // dest
+    ctx->secondaryForsCommandBuffer,
+    ctx->secondaryForsNodesBuffer, // src
+    ctx->secondaryForsRootsBuffer, // dest
     SLHVK_FORS_TREE_COUNT, // region count
     forsRootsCopyRegions
   );
 
-  err = vkEndCommandBuffer(ctx.secondaryForsCommandBuffer);
+  err = vkEndCommandBuffer(ctx->secondaryForsCommandBuffer);
   if (err) goto cleanup;
 
 
   /*************  Fill the second primary device command buffer  **************/
 
-  err = vkBeginCommandBuffer(ctx.primaryHypertreeFinishCommandBuffer, &cmdBufBeginInfo);
+  err = vkBeginCommandBuffer(ctx->primaryHypertreeFinishCommandBuffer, &cmdBufBeginInfo);
   if (err) goto cleanup;
 
   // Copy the FORS pubkey to the XMSS messages buffer
@@ -1391,49 +1508,49 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
     .dstOffset = 0,
   };
   vkCmdCopyBuffer(
-    ctx.primaryHypertreeFinishCommandBuffer,
-    ctx.primaryForsPubkeyStagingBuffer, // src
-    ctx.primaryXmssMessagesBuffer, // dest
+    ctx->primaryHypertreeFinishCommandBuffer,
+    ctx->primaryForsPubkeyStagingBuffer, // src
+    ctx->primaryXmssMessagesBuffer, // dest
     1, // region count
     &regions
   );
 
   // Bind and dispatch the final WOTS signing shader.
   vkCmdBindPipeline(
-    ctx.primaryHypertreeFinishCommandBuffer,
+    ctx->primaryHypertreeFinishCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx.wotsSignPipeline
+    ctx->wotsSignPipeline
   );
   vkCmdBindDescriptorSets(
-    ctx.primaryHypertreeFinishCommandBuffer,
+    ctx->primaryHypertreeFinishCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx.wotsSignPipelineLayout,
+    ctx->wotsSignPipelineLayout,
     0, // set number of first descriptor_set to be bound
     1, // number of descriptor sets
-    &ctx.wotsSignDescriptorSet,
+    &ctx->wotsSignDescriptorSet,
     0,  // offset count
     NULL // offsets array
   );
   vkCmdDispatch(
-    ctx.primaryHypertreeFinishCommandBuffer,
+    ctx->primaryHypertreeFinishCommandBuffer,
     numWorkGroups(SLHVK_HYPERTREE_LAYERS * SLHVK_WOTS_CHAIN_COUNT), // One thread per signing chain
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
   );
 
   // Copy to a host-visible buffer if the device-local buffer isn't also host-visible.
-  if ((ctx.primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
+  if ((ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = SLHVK_HYPERTREE_SIGNATURE_SIZE };
     vkCmdCopyBuffer(
-      ctx.primaryHypertreeFinishCommandBuffer,
-      ctx.primaryHypertreeSignatureBufferDeviceLocal, // src
-      ctx.primaryHypertreeSignatureBufferHostVisible, // dest
+      ctx->primaryHypertreeFinishCommandBuffer,
+      ctx->primaryHypertreeSignatureBufferDeviceLocal, // src
+      ctx->primaryHypertreeSignatureBufferHostVisible, // dest
       1, // region count
       &regions // regions
     );
   }
 
-  err = vkEndCommandBuffer(ctx.primaryHypertreeFinishCommandBuffer);
+  err = vkEndCommandBuffer(ctx->primaryHypertreeFinishCommandBuffer);
   if (err) goto cleanup;
 
   *ctxPtr = ctx;
@@ -1441,7 +1558,7 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
 cleanup:
   free(physicalDevices);
-  slhvkContextFree(&ctx);
+  slhvkContextFree(ctx);
   return err;
 }
 
@@ -1453,7 +1570,7 @@ static void prepstate(ShaContext* shaCtx, const uint8_t pkSeed[N]) {
 }
 
 int slhvkSignPure(
-  SlhvkContext* ctx,
+  SlhvkContext ctx,
   const uint8_t skSeed[N],
   const uint8_t skPrf[N],
   const uint8_t pkSeed[N],
