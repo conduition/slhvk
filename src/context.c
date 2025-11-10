@@ -8,7 +8,6 @@
 #include "sha256.h"
 #include "context.h"
 #include "hashing.h"
-#include "fors.h"
 #include "shaders/wots_tips_precompute.h"
 #include "shaders/xmss_leaves_precompute.h"
 #include "shaders/xmss_merkle_sign.h"
