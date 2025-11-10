@@ -19,7 +19,8 @@ int main() {
   uint8_t pkSeed[N] = {16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
   uint8_t pkRoot[N] = {0};
   uint8_t skPrf[N] = {0};
-  uint32_t skSeed[HASH_WORDS] = {0x00001122, 0xff299990, 0x01020304, 0xaabbccdd};
+  uint8_t skSeed[N] = {0x00, 0x00, 0x11, 0x22, 0xff, 0x29, 0x99, 0x90,
+                       0x01, 0x02, 0x03, 0x04, 0xaa, 0xbb, 0xcc, 0xdd};
   const uint8_t message[] = "hello world";
 
   uint8_t slhDsaSignature[SLH_DSA_SIGNATURE_SIZE];

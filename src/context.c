@@ -1437,7 +1437,7 @@ static void prepstate(ShaContext* shaCtx, const uint8_t pkSeed[N]) {
 
 int slhvkSignPure(
   SlhvkContext* ctx,
-  const uint32_t skSeed[HASH_WORDS],
+  const uint8_t skSeed[N],
   const uint8_t skPrf[N],
   const uint8_t pkSeed[N],
   const uint8_t pkRoot[N],
@@ -1526,7 +1526,13 @@ int slhvkSignPure(
     if (err) goto cleanup;
 
     memcpy(&mapped->sha256_state[0], shaCtxInitial.state, sizeof(uint32_t) * 8);
-    memcpy(&mapped->sk_seed[0], skSeed, sizeof(uint32_t) * HASH_WORDS);
+
+    // Copy the skSeed into a big-endian encoded u32 array
+    for (size_t i = 0; i < HASH_WORDS; i++) {
+      size_t i4 = i * sizeof(uint32_t);
+      mapped->sk_seed[i] = ((uint32_t) skSeed[i4] << 24) | ((uint32_t) skSeed[i4 + 1] << 16) |
+                           ((uint32_t) skSeed[i4 + 2] << 8) | (uint32_t) skSeed[i4 + 3];
+    }
     mapped->tree_address = treeAddress;
     mapped->signing_keypair_address = signingKeypairAddress;
     vkUnmapMemory(devices[i], memories[i]);

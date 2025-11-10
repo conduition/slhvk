@@ -144,7 +144,7 @@ int slhvkContextInit(SlhvkContext* ctx);
 
 int slhvkSignPure(
   SlhvkContext* ctx,
-  const uint32_t skSeed[HASH_WORDS],
+  const uint8_t skSeed[N],
   const uint8_t skPrf[N],
   const uint8_t pkSeed[N],
   const uint8_t pkRoot[N],
