@@ -8,5 +8,5 @@ void slhvkHashForsRootsToWotsMessage(
   uint64_t treeAddress,
   uint32_t keypairAddress,
   const ShaContext* shaCtxInitial,
-  uint32_t wotsMessage[WOTS_CHAIN_COUNT]
+  uint32_t wotsMessage[SLHVK_WOTS_CHAIN_COUNT]
 );

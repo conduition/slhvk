@@ -5,13 +5,13 @@
 
 #define ADRS_TYPE_FORS_ROOTS 4
 
-static void hashToBaseW(const uint8_t hash[N], uint32_t wotsMessage[WOTS_CHAIN_COUNT]) {
-  #if WOTS_CHAIN_LEN == 256
-    for (int i = 0; i < N; i++) {
+static void hashToBaseW(const uint8_t hash[SLHVK_N], uint32_t wotsMessage[SLHVK_WOTS_CHAIN_COUNT]) {
+  #if SLHVK_WOTS_CHAIN_LEN == 256
+    for (int i = 0; i < SLHVK_N; i++) {
       wotsMessage[i] = (uint32_t) hash[i];
     }
-  #elif WOTS_CHAIN_LEN == 16
-    for (int i = 0; i < N; i++) {
+  #elif SLHVK_WOTS_CHAIN_LEN == 16
+    for (int i = 0; i < SLHVK_N; i++) {
       wotsMessage[i * 2] = (uint32_t) (hash[i] >> 4) & 0xF;
       wotsMessage[i * 2 + 1] = (uint32_t) hash[i] & 0xF;
     }
@@ -19,15 +19,15 @@ static void hashToBaseW(const uint8_t hash[N], uint32_t wotsMessage[WOTS_CHAIN_C
     #error "Unexpected SLH-DSA W parameter, should be 256 or 16"
   #endif
 
-  // wotsMessage is now initialized up to WOTS_CHAIN_COUNT1.
+  // wotsMessage is now initialized up to SLHVK_WOTS_CHAIN_COUNT1.
   // time to append the checksum.
   uint32_t checksum = 0;
-  for (int i = 0; i < WOTS_CHAIN_COUNT1; i++) {
-    checksum += WOTS_CHAIN_LEN - 1 - wotsMessage[i];
+  for (int i = 0; i < SLHVK_WOTS_CHAIN_COUNT1; i++) {
+    checksum += SLHVK_WOTS_CHAIN_LEN - 1 - wotsMessage[i];
   }
-  for (int i = 0; i < WOTS_CHAIN_COUNT2; i++) {
-    wotsMessage[WOTS_CHAIN_COUNT - 1 - i] = checksum & (WOTS_CHAIN_LEN - 1);
-    checksum >>= LOG_W;
+  for (int i = 0; i < SLHVK_WOTS_CHAIN_COUNT2; i++) {
+    wotsMessage[SLHVK_WOTS_CHAIN_COUNT - 1 - i] = checksum & (SLHVK_WOTS_CHAIN_LEN - 1);
+    checksum >>= SLHVK_LOG_W;
   }
 }
 
@@ -36,7 +36,7 @@ void slhvkHashForsRootsToWotsMessage(
   uint64_t treeAddress,
   uint32_t keypairAddress,
   const ShaContext* shaCtxInitial,
-  uint32_t wotsMessage[WOTS_CHAIN_COUNT]
+  uint32_t wotsMessage[SLHVK_WOTS_CHAIN_COUNT]
 ) {
   ShaContext shaCtx;
   sha256_clone(&shaCtx, shaCtxInitial);
@@ -58,9 +58,9 @@ void slhvkHashForsRootsToWotsMessage(
   }
 
   sha256_update(&shaCtx, adrsCompressed, 22);
-  sha256_update(&shaCtx, forsRoots, N * FORS_TREE_COUNT);
+  sha256_update(&shaCtx, forsRoots, SLHVK_N * SLHVK_FORS_TREE_COUNT);
 
-  uint8_t forsPubkey[N];
-  sha256_finalize(&shaCtx, forsPubkey, N);
+  uint8_t forsPubkey[SLHVK_N];
+  sha256_finalize(&shaCtx, forsPubkey, SLHVK_N);
   hashToBaseW(forsPubkey, wotsMessage);
 }

@@ -19,13 +19,13 @@
 #define MAX_DESCRIPTOR_SETS_PER_DEVICE 10
 #define MAX_DESCRIPTORS_PER_DEVICE     20
 
-#define WOTS_CHAIN_BUFFER_SIZE (N * WOTS_CHAIN_COUNT * XMSS_LEAVES * HYPERTREE_LAYERS)
-#define XMSS_NODES_BUFFER_SIZE (N * XMSS_LEAVES * HYPERTREE_LAYERS)
-#define XMSS_MESSAGES_BUFFER_SIZE (sizeof(uint32_t) * WOTS_CHAIN_COUNT * HYPERTREE_LAYERS)
-#define FORS_MESSAGE_BUFFER_SIZE (sizeof(uint32_t) * FORS_TREE_COUNT)
-#define FORS_NODES_BUFFER_SIZE (N * FORS_TREE_COUNT * FORS_LEAVES_COUNT)
-#define FORS_ROOTS_BUFFER_SIZE (N * FORS_TREE_COUNT)
-#define FORS_PUBKEY_STAGING_BUFFER_SIZE (sizeof(uint32_t) * WOTS_CHAIN_COUNT)
+#define WOTS_CHAIN_BUFFER_SIZE (N * SLHVK_WOTS_CHAIN_COUNT * SLHVK_XMSS_LEAVES * SLHVK_HYPERTREE_LAYERS)
+#define XMSS_NODES_BUFFER_SIZE (N * SLHVK_XMSS_LEAVES * SLHVK_HYPERTREE_LAYERS)
+#define XMSS_MESSAGES_BUFFER_SIZE (sizeof(uint32_t) * SLHVK_WOTS_CHAIN_COUNT * SLHVK_HYPERTREE_LAYERS)
+#define FORS_MESSAGE_BUFFER_SIZE (sizeof(uint32_t) * SLHVK_FORS_TREE_COUNT)
+#define FORS_NODES_BUFFER_SIZE (N * SLHVK_FORS_TREE_COUNT * SLHVK_FORS_LEAVES_COUNT)
+#define FORS_ROOTS_BUFFER_SIZE (N * SLHVK_FORS_TREE_COUNT)
+#define FORS_PUBKEY_STAGING_BUFFER_SIZE (sizeof(uint32_t) * SLHVK_WOTS_CHAIN_COUNT)
 
 #define WOTS_TIPS_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT 2
 #define XMSS_LEAVES_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT 3
@@ -36,6 +36,8 @@
 #define FORS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT 4
 
 #define SPEC_CONSTANTS_COUNT 9
+
+#define N SLHVK_N
 
 static uint32_t numWorkGroups(uint32_t threadsCount) {
   return (threadsCount + SLHVK_DEFAULT_WORK_GROUP_SIZE - 1) / SLHVK_DEFAULT_WORK_GROUP_SIZE;
@@ -188,7 +190,7 @@ typedef struct CommonInputs {
   uint32_t sha256State[8];
 
   // Secret seed from the private key.
-  uint32_t skSeed[HASH_WORDS];
+  uint32_t skSeed[SLHVK_HASH_WORDS];
 
   // adrs[1:4]
   uint64_t treeAddress;
@@ -531,12 +533,12 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   err = vkCreateBuffer(ctx.primaryDevice, &bufferCreateInfo, NULL, &ctx.primaryForsPubkeyStagingBuffer);
   if (err) goto cleanup;
 
-  bufferCreateInfo.size = HYPERTREE_SIGNATURE_SIZE;
+  bufferCreateInfo.size = SLHVK_HYPERTREE_SIGNATURE_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
   err = vkCreateBuffer(ctx.primaryDevice, &bufferCreateInfo, NULL, &ctx.primaryHypertreeSignatureBufferDeviceLocal);
   if (err) goto cleanup;
 
-  bufferCreateInfo.size = HYPERTREE_SIGNATURE_SIZE;
+  bufferCreateInfo.size = SLHVK_HYPERTREE_SIGNATURE_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   err = vkCreateBuffer(ctx.primaryDevice, &bufferCreateInfo, NULL, &ctx.primaryHypertreeSignatureBufferHostVisible);
   if (err) goto cleanup;
@@ -568,12 +570,12 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   err = vkCreateBuffer(ctx.secondaryDevice, &bufferCreateInfo, NULL, &ctx.secondaryForsNodesBuffer);
   if (err) goto cleanup;
 
-  bufferCreateInfo.size = FORS_SIGNATURE_SIZE;
+  bufferCreateInfo.size = SLHVK_FORS_SIGNATURE_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
   err = vkCreateBuffer(ctx.secondaryDevice, &bufferCreateInfo, NULL, &ctx.secondaryForsSignatureBufferDeviceLocal);
   if (err) goto cleanup;
 
-  bufferCreateInfo.size = FORS_SIGNATURE_SIZE;
+  bufferCreateInfo.size = SLHVK_FORS_SIGNATURE_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   err = vkCreateBuffer(ctx.secondaryDevice, &bufferCreateInfo, NULL, &ctx.secondaryForsSignatureBufferHostVisible);
   if (err) goto cleanup;
@@ -990,14 +992,14 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
 
   const uint32_t specializationConstants[SPEC_CONSTANTS_COUNT] = {
     SLHVK_DEFAULT_WORK_GROUP_SIZE,
-    HASH_WORDS,
-    FORS_TREE_HEIGHT,
-    FORS_TREE_COUNT,
-    LOG_W,
-    WOTS_CHAIN_COUNT1,
-    WOTS_CHAIN_COUNT2,
-    XMSS_HEIGHT,
-    HYPERTREE_LAYERS,
+    SLHVK_HASH_WORDS,
+    SLHVK_FORS_TREE_HEIGHT,
+    SLHVK_FORS_TREE_COUNT,
+    SLHVK_LOG_W,
+    SLHVK_WOTS_CHAIN_COUNT1,
+    SLHVK_WOTS_CHAIN_COUNT2,
+    SLHVK_XMSS_HEIGHT,
+    SLHVK_HYPERTREE_LAYERS,
   };
 
   VkSpecializationMapEntry specConstEntries[SPEC_CONSTANTS_COUNT];
@@ -1165,7 +1167,7 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   );
   vkCmdDispatch(
     ctx.primaryHypertreePresignCommandBuffer,
-    numWorkGroups(HYPERTREE_LAYERS * XMSS_LEAVES * WOTS_CHAIN_COUNT),
+    numWorkGroups(SLHVK_HYPERTREE_LAYERS * SLHVK_XMSS_LEAVES * SLHVK_WOTS_CHAIN_COUNT),
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
   );
@@ -1205,7 +1207,7 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   );
   vkCmdDispatch(
     ctx.primaryHypertreePresignCommandBuffer,
-    numWorkGroups(HYPERTREE_LAYERS * XMSS_LEAVES),
+    numWorkGroups(SLHVK_HYPERTREE_LAYERS * SLHVK_XMSS_LEAVES),
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
   );
@@ -1246,7 +1248,7 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   );
   vkCmdDispatch(
     ctx.primaryHypertreePresignCommandBuffer,
-    HYPERTREE_LAYERS, // One work group per XMSS tree
+    SLHVK_HYPERTREE_LAYERS, // One work group per XMSS tree
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
   );
@@ -1299,7 +1301,7 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   );
   vkCmdDispatch(
     ctx.secondaryForsCommandBuffer,
-    numWorkGroups(FORS_TREE_COUNT * FORS_LEAVES_COUNT), // One thread per FORS leaf node
+    numWorkGroups(SLHVK_FORS_TREE_COUNT * SLHVK_FORS_LEAVES_COUNT), // One thread per FORS leaf node
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
   );
@@ -1339,14 +1341,14 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   );
   vkCmdDispatch(
     ctx.secondaryForsCommandBuffer,
-    FORS_TREE_COUNT, // One work group per FORS tree
+    SLHVK_FORS_TREE_COUNT, // One work group per FORS tree
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
   );
 
   // Copy to host-visible buffer if the device-local buffer isn't also host-visible.
   if ((ctx.secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
-    VkBufferCopy regions = { .size = FORS_SIGNATURE_SIZE };
+    VkBufferCopy regions = { .size = SLHVK_FORS_SIGNATURE_SIZE };
     vkCmdCopyBuffer(
       ctx.secondaryForsCommandBuffer,
       ctx.secondaryForsSignatureBufferDeviceLocal, // src
@@ -1357,10 +1359,10 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   }
 
   // Copy each of the computed FORS tree root hashes to a host-visible buffer.
-  VkBufferCopy forsRootsCopyRegions[FORS_TREE_COUNT];
-  for (uint32_t i = 0; i < FORS_TREE_COUNT; i++) {
+  VkBufferCopy forsRootsCopyRegions[SLHVK_FORS_TREE_COUNT];
+  for (uint32_t i = 0; i < SLHVK_FORS_TREE_COUNT; i++) {
     forsRootsCopyRegions[i] = (VkBufferCopy) {
-      .srcOffset = i * FORS_LEAVES_COUNT * N,
+      .srcOffset = i * SLHVK_FORS_LEAVES_COUNT * N,
       .dstOffset = i * N,
       .size = N,
     };
@@ -1369,7 +1371,7 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
     ctx.secondaryForsCommandBuffer,
     ctx.secondaryForsNodesBuffer, // src
     ctx.secondaryForsRootsBuffer, // dest
-    FORS_TREE_COUNT, // region count
+    SLHVK_FORS_TREE_COUNT, // region count
     forsRootsCopyRegions
   );
 
@@ -1414,14 +1416,14 @@ int slhvkContextInit(SlhvkContext* ctxPtr) {
   );
   vkCmdDispatch(
     ctx.primaryHypertreeFinishCommandBuffer,
-    numWorkGroups(HYPERTREE_LAYERS * WOTS_CHAIN_COUNT), // One thread per signing chain
+    numWorkGroups(SLHVK_HYPERTREE_LAYERS * SLHVK_WOTS_CHAIN_COUNT), // One thread per signing chain
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
   );
 
   // Copy to a host-visible buffer if the device-local buffer isn't also host-visible.
   if ((ctx.primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
-    VkBufferCopy regions = { .size = HYPERTREE_SIGNATURE_SIZE };
+    VkBufferCopy regions = { .size = SLHVK_HYPERTREE_SIGNATURE_SIZE };
     vkCmdCopyBuffer(
       ctx.primaryHypertreeFinishCommandBuffer,
       ctx.primaryHypertreeSignatureBufferDeviceLocal, // src
@@ -1461,7 +1463,7 @@ int slhvkSignPure(
   uint8_t contextStringSize,
   const uint8_t* rawMessage,
   size_t rawMessageSize,
-  uint8_t signatureOutput[SLH_DSA_SIGNATURE_SIZE]
+  uint8_t signatureOutput[SLHVK_SIGNATURE_SIZE]
 ) {
   // Deterministic mode
   if (addrnd == NULL) addrnd = pkSeed;
@@ -1477,7 +1479,7 @@ int slhvkSignPure(
     randomizer
   );
 
-  uint32_t forsIndices[FORS_TREE_COUNT];
+  uint32_t forsIndices[SLHVK_FORS_TREE_COUNT];
   uint64_t treeAddress;
   uint32_t signingKeypairAddress;
   slhvkDigestAndSplitMsg(
@@ -1543,7 +1545,7 @@ int slhvkSignPure(
     memcpy(&mapped->sha256State[0], shaCtxInitial.state, sizeof(uint32_t) * 8);
 
     // Copy the skSeed into a big-endian encoded u32 array
-    for (size_t i = 0; i < HASH_WORDS; i++) {
+    for (size_t i = 0; i < SLHVK_HASH_WORDS; i++) {
       size_t i4 = i * sizeof(uint32_t);
       mapped->skSeed[i] = ((uint32_t) skSeed[i4] << 24) | ((uint32_t) skSeed[i4 + 1] << 16) |
                           ((uint32_t) skSeed[i4 + 2] << 8) | (uint32_t) skSeed[i4 + 3];
@@ -1603,7 +1605,7 @@ int slhvkSignPure(
   memcpy(forsRoots, mappedForsRoots, FORS_ROOTS_BUFFER_SIZE);
   vkUnmapMemory(ctx->secondaryDevice, ctx->secondaryForsRootsBufferMemory);
 
-  uint32_t wotsMessage[WOTS_CHAIN_COUNT];
+  uint32_t wotsMessage[SLHVK_WOTS_CHAIN_COUNT];
   slhvkHashForsRootsToWotsMessage(
     forsRoots,
     treeAddress,
@@ -1623,7 +1625,7 @@ int slhvkSignPure(
     (void**) &mappedWotsMessage
   );
   if (err) goto cleanup;
-  for (int i = 0; i < WOTS_CHAIN_COUNT; i++) {
+  for (int i = 0; i < SLHVK_WOTS_CHAIN_COUNT; i++) {
     mappedWotsMessage[i] = wotsMessage[i];
   }
   vkUnmapMemory(ctx->primaryDevice, ctx->primaryForsPubkeyStagingBufferMemory);
@@ -1647,24 +1649,24 @@ int slhvkSignPure(
   memcpy(signatureOutput, randomizer, N);
 
   // Copy the FORS signature to the output pointer
-  uint8_t forsSig[FORS_SIGNATURE_SIZE];
+  uint8_t forsSig[SLHVK_FORS_SIGNATURE_SIZE];
   VkDeviceMemory forsSigMemory = (ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     ? ctx->secondaryForsSignatureBufferDeviceLocalMemory
     : ctx->secondaryForsSignatureBufferHostVisibleMemory;
   uint8_t* mappedSignature = NULL;
-  err = vkMapMemory(ctx->secondaryDevice, forsSigMemory, 0, FORS_SIGNATURE_SIZE, 0, (void**) &mappedSignature);
+  err = vkMapMemory(ctx->secondaryDevice, forsSigMemory, 0, SLHVK_FORS_SIGNATURE_SIZE, 0, (void**) &mappedSignature);
   if (err) goto cleanup;
-  memcpy(&signatureOutput[N], mappedSignature, FORS_SIGNATURE_SIZE);
-  memcpy(forsSig, mappedSignature, FORS_SIGNATURE_SIZE);
+  memcpy(&signatureOutput[N], mappedSignature, SLHVK_FORS_SIGNATURE_SIZE);
+  memcpy(forsSig, mappedSignature, SLHVK_FORS_SIGNATURE_SIZE);
   vkUnmapMemory(ctx->secondaryDevice, forsSigMemory);
 
   // Copy the hypertree signature to the output pointer
   VkDeviceMemory hypertreeSigMemory = (ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     ? ctx->primaryHypertreeSignatureBufferDeviceLocalMemory
     : ctx->primaryHypertreeSignatureBufferHostVisibleMemory;
-  err = vkMapMemory(ctx->primaryDevice, hypertreeSigMemory, 0, HYPERTREE_SIGNATURE_SIZE, 0, (void**) &mappedSignature);
+  err = vkMapMemory(ctx->primaryDevice, hypertreeSigMemory, 0, SLHVK_HYPERTREE_SIGNATURE_SIZE, 0, (void**) &mappedSignature);
   if (err) goto cleanup;
-  memcpy(&signatureOutput[N + FORS_SIGNATURE_SIZE], mappedSignature, HYPERTREE_SIGNATURE_SIZE);
+  memcpy(&signatureOutput[N + SLHVK_FORS_SIGNATURE_SIZE], mappedSignature, SLHVK_HYPERTREE_SIGNATURE_SIZE);
   vkUnmapMemory(ctx->primaryDevice, hypertreeSigMemory);
 
 cleanup:
