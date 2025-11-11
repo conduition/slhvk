@@ -9,6 +9,7 @@ OBJ := $(SRC:.c=.o)
 SHADER_COMMON := common.comp signing_common.comp
 SHADER_MAIN   := wots_tips_precompute.comp xmss_leaves_precompute.comp xmss_merkle_sign.comp
 SHADER_MAIN   += fors_leaves_gen.comp fors_merkle_sign.comp wots_sign.comp
+SHADER_MAIN   += keygen_wots_tips.comp keygen_xmss_leaves.comp keygen_xmss_roots.comp
 
 SHADER_DIR    := src/shaders
 SHADER_COMMON := $(addprefix $(SHADER_DIR)/,$(SHADER_COMMON))

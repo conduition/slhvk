@@ -11,6 +11,9 @@
 #include "shaders/wots_tips_precompute.h"
 #include "shaders/xmss_leaves_precompute.h"
 #include "shaders/xmss_merkle_sign.h"
+#include "shaders/keygen_wots_tips.h"
+#include "shaders/keygen_xmss_leaves.h"
+#include "shaders/keygen_xmss_roots.h"
 #include "shaders/wots_sign.h"
 #include "shaders/fors_leaves_gen.h"
 #include "shaders/fors_merkle_sign.h"
@@ -30,6 +33,7 @@
 #define XMSS_LEAVES_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT 3
 #define XMSS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT 4
 #define WOTS_SIGN_PIPELINE_DESCRIPTOR_COUNT 3
+#define KEYGEN_PIPELINE_DESCRIPTOR_COUNT 4
 
 #define FORS_LEAVES_GEN_PIPELINE_DESCRIPTOR_COUNT 4
 #define FORS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT 4
@@ -184,7 +188,7 @@ static void bindBuffersToDescriptorSet(
 }
 
 
-typedef struct CommonInputs {
+typedef struct CommonSigningInputs {
   // The SHA256 state after absorbing the `pk_seed` and padding.
   uint32_t sha256State[8];
 
@@ -196,8 +200,7 @@ typedef struct CommonInputs {
 
   // the index of the layer 0 keypair to be used for signing the message.
   uint32_t signingKeypairAddress;
-} CommonInputs;
-
+} CommonSigningInputs;
 
 typedef struct SlhvkContext_T {
   VkInstance instance;
@@ -237,6 +240,17 @@ typedef struct SlhvkContext_T {
   VkPipelineLayout      wotsSignPipelineLayout;
   VkDescriptorSet       wotsSignDescriptorSet;
   VkDescriptorSetLayout wotsSignDescriptorSetLayout;
+
+  /*******   Keygen resources  ***********/
+  VkShaderModule        keygenWotsTipsShader;
+  VkShaderModule        keygenXmssLeavesShader;
+  VkShaderModule        keygenXmssRootsShader;
+  VkPipeline            keygenWotsTipsPipeline;
+  VkPipeline            keygenXmssLeavesPipeline;
+  VkPipeline            keygenXmssRootsPipeline;
+  VkPipelineLayout      keygenPipelineLayout;
+  VkDescriptorSetLayout keygenDescriptorSetLayout;
+  VkDescriptorSet       keygenDescriptorSet;
 
   // primary device buffers
   VkBuffer primaryInputsBufferDeviceLocal;
@@ -359,6 +373,16 @@ void slhvkContextFree(SlhvkContext_T* ctx) {
     vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsSignatureBufferDeviceLocalMemory, NULL);
     vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsSignatureBufferHostVisibleMemory, NULL);
     vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsRootsBufferMemory, NULL);
+
+    // Keygen resources
+    vkDestroyShaderModule(ctx->primaryDevice, ctx->keygenWotsTipsShader, NULL);
+    vkDestroyShaderModule(ctx->primaryDevice, ctx->keygenXmssLeavesShader, NULL);
+    vkDestroyShaderModule(ctx->primaryDevice, ctx->keygenXmssRootsShader, NULL);
+    vkDestroyPipeline(ctx->primaryDevice, ctx->keygenWotsTipsPipeline, NULL);
+    vkDestroyPipeline(ctx->primaryDevice, ctx->keygenXmssLeavesPipeline, NULL);
+    vkDestroyPipeline(ctx->primaryDevice, ctx->keygenXmssRootsPipeline, NULL);
+    vkDestroyPipelineLayout(ctx->primaryDevice, ctx->keygenPipelineLayout, NULL);
+    vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->keygenDescriptorSetLayout, NULL);
 
     // WOTS tip precompute pipeline
     vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->wotsTipsPrecomputeDescriptorSetLayout, NULL);
@@ -620,12 +644,12 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE, // buffers are exclusive to a single queue family at a time.
   };
 
-  bufferCreateInfo.size = sizeof(CommonInputs);
+  bufferCreateInfo.size = sizeof(CommonSigningInputs);
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryInputsBufferDeviceLocal);
   if (err) goto cleanup;
 
-  bufferCreateInfo.size = sizeof(CommonInputs);
+  bufferCreateInfo.size = sizeof(CommonSigningInputs);
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryInputsBufferHostVisible);
   if (err) goto cleanup;
@@ -662,12 +686,12 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
 
   /**** Secondary device buffers ****/
 
-  bufferCreateInfo.size = sizeof(CommonInputs);
+  bufferCreateInfo.size = sizeof(CommonSigningInputs);
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   err = vkCreateBuffer(ctx->secondaryDevice, &bufferCreateInfo, NULL, &ctx->secondaryInputsBufferDeviceLocal);
   if (err) goto cleanup;
 
-  bufferCreateInfo.size = sizeof(CommonInputs);
+  bufferCreateInfo.size = sizeof(CommonSigningInputs);
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
   err = vkCreateBuffer(ctx->secondaryDevice, &bufferCreateInfo, NULL, &ctx->secondaryInputsBufferHostVisible);
   if (err) goto cleanup;
@@ -876,6 +900,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   err = setupDescriptorSetLayout(
+    ctx->primaryDevice,
+    KEYGEN_PIPELINE_DESCRIPTOR_COUNT,
+    &ctx->keygenDescriptorSetLayout
+  );
+  if (err) goto cleanup;
+
+  err = setupDescriptorSetLayout(
     ctx->secondaryDevice,
     FORS_LEAVES_GEN_PIPELINE_DESCRIPTOR_COUNT,
     &ctx->forsLeavesGenDescriptorSetLayout
@@ -933,6 +964,24 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   );
   if (err) goto cleanup;
 
+  VkPushConstantRange pushConstantRange = {
+    .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+    .size = sizeof(uint32_t),
+  };
+  pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
+  pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+  pipelineLayoutCreateInfo.pSetLayouts = &ctx->keygenDescriptorSetLayout,
+  err = vkCreatePipelineLayout(
+    ctx->primaryDevice,
+    &pipelineLayoutCreateInfo,
+    NULL,
+    &ctx->keygenPipelineLayout
+  );
+  if (err) goto cleanup;
+
+  pipelineLayoutCreateInfo.pPushConstantRanges = NULL;
+  pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+
   pipelineLayoutCreateInfo.pSetLayouts = &ctx->forsLeavesGenDescriptorSetLayout,
   err = vkCreatePipelineLayout(
     ctx->secondaryDevice,
@@ -974,6 +1023,10 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
 
   descriptorSetAllocateInfo.pSetLayouts = &ctx->wotsSignDescriptorSetLayout;
   err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->wotsSignDescriptorSet);
+  if (err) goto cleanup;
+
+  descriptorSetAllocateInfo.pSetLayouts = &ctx->keygenDescriptorSetLayout;
+  err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->keygenDescriptorSet);
   if (err) goto cleanup;
 
 
@@ -1094,6 +1147,21 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->wotsSignShader);
   if (err) goto cleanup;
 
+  shaderCreateInfo.pCode = (uint32_t*) keygen_wots_tips_spv,
+  shaderCreateInfo.codeSize = keygen_wots_tips_spv_len,
+  err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->keygenWotsTipsShader);
+  if (err) goto cleanup;
+
+  shaderCreateInfo.pCode = (uint32_t*) keygen_xmss_leaves_spv,
+  shaderCreateInfo.codeSize = keygen_xmss_leaves_spv_len,
+  err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->keygenXmssLeavesShader);
+  if (err) goto cleanup;
+
+  shaderCreateInfo.pCode = (uint32_t*) keygen_xmss_roots_spv,
+  shaderCreateInfo.codeSize = keygen_xmss_roots_spv_len,
+  err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->keygenXmssRootsShader);
+  if (err) goto cleanup;
+
   shaderCreateInfo.pCode = (uint32_t*) fors_leaves_gen_spv,
   shaderCreateInfo.codeSize = fors_leaves_gen_spv_len,
   err = vkCreateShaderModule(ctx->secondaryDevice, &shaderCreateInfo, NULL, &ctx->forsLeavesGenShader);
@@ -1196,6 +1264,44 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   );
   if (err) goto cleanup;
 
+  pipelineCreateInfo.stage.module = ctx->keygenWotsTipsShader;
+  pipelineCreateInfo.layout       = ctx->keygenPipelineLayout;
+  err = vkCreateComputePipelines(
+    ctx->primaryDevice,
+    VK_NULL_HANDLE, // pipeline cache, TODO
+    1,
+    &pipelineCreateInfo,
+    NULL,
+    &ctx->keygenWotsTipsPipeline
+  );
+  if (err) {
+    goto cleanup;
+  }
+
+  pipelineCreateInfo.stage.module = ctx->keygenXmssLeavesShader;
+  pipelineCreateInfo.layout       = ctx->keygenPipelineLayout;
+  err = vkCreateComputePipelines(
+    ctx->primaryDevice,
+    VK_NULL_HANDLE, // pipeline cache, TODO
+    1,
+    &pipelineCreateInfo,
+    NULL,
+    &ctx->keygenXmssLeavesPipeline
+  );
+  if (err) goto cleanup;
+
+  pipelineCreateInfo.stage.module = ctx->keygenXmssRootsShader;
+  pipelineCreateInfo.layout       = ctx->keygenPipelineLayout;
+  err = vkCreateComputePipelines(
+    ctx->primaryDevice,
+    VK_NULL_HANDLE, // pipeline cache, TODO
+    1,
+    &pipelineCreateInfo,
+    NULL,
+    &ctx->keygenXmssRootsPipeline
+  );
+  if (err) goto cleanup;
+
   pipelineCreateInfo.stage.module = ctx->forsLeavesGenShader;
   pipelineCreateInfo.layout       = ctx->forsLeavesGenPipelineLayout;
   err = vkCreateComputePipelines(
@@ -1246,7 +1352,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
 
-  /**************  Fill the first primary device command buffer  ***************/
+  /**************  Fill the presigning primary device command buffer  ***************/
 
   VkCommandBufferBeginInfo cmdBufBeginInfo = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -1256,7 +1362,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
 
   // Copy from a host-visible buffer if the device-local buffer isn't also host-visible.
   if ((ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
-    VkBufferCopy regions = { .size = sizeof(CommonInputs) };
+    VkBufferCopy regions = { .size = sizeof(CommonSigningInputs) };
     vkCmdCopyBuffer(
       ctx->primaryHypertreePresignCommandBuffer,
       ctx->primaryInputsBufferHostVisible, // src
@@ -1374,14 +1480,14 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
 
-  /**************  Fill the secondary command buffer *****************/
+  /**************  Fill the secondary FORS-signing command buffer *****************/
 
   err = vkBeginCommandBuffer(ctx->secondaryForsCommandBuffer, &cmdBufBeginInfo);
   if (err) goto cleanup;
 
   // Copy from host-visible buffers if the device-local buffer isn't also host-visible.
   if ((ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
-    VkBufferCopy regions = { .size = sizeof(CommonInputs) };
+    VkBufferCopy regions = { .size = sizeof(CommonSigningInputs) };
     vkCmdCopyBuffer(
       ctx->secondaryForsCommandBuffer,
       ctx->secondaryInputsBufferHostVisible, // src
@@ -1496,7 +1602,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
 
-  /*************  Fill the second primary device command buffer  **************/
+  /*************  Fill the primary device finish-signing command buffer  **************/
 
   err = vkBeginCommandBuffer(ctx->primaryHypertreeFinishCommandBuffer, &cmdBufBeginInfo);
   if (err) goto cleanup;
@@ -1648,12 +1754,12 @@ int slhvkSignPure(
   VkDevice       devices[2]  = { ctx->primaryDevice, ctx->secondaryDevice };
 
   for (int i = 0; i < 2; i++) {
-    CommonInputs* mapped = NULL;
+    CommonSigningInputs* mapped = NULL;
     err = vkMapMemory(
       devices[i],
       memories[i],
       0, // offset
-      sizeof(CommonInputs),
+      sizeof(CommonSigningInputs),
       0, // flags
       (void**) &mapped
     );
@@ -1789,5 +1895,376 @@ int slhvkSignPure(
 cleanup:
   vkDestroyFence(ctx->primaryDevice, primaryFence, NULL);
   vkDestroyFence(ctx->secondaryDevice, secondaryFence, NULL);
+  return err;
+}
+
+
+int slhvkKeygen(
+  SlhvkContext ctx,
+  uint32_t keysCount,
+  const uint8_t* const* skSeeds,
+  const uint8_t* const* pkSeeds,
+  uint8_t** pkRootsOut
+) {
+  int err = 0;
+  VkBuffer keygenIOStagingBuffer = NULL;
+  VkBuffer keygenSha256StateStagingBuffer = NULL;
+  VkBuffer keygenIOBuffer = NULL;
+  VkBuffer keygenSha256StateBuffer = NULL;
+  VkBuffer keygenWotsChainBuffer = NULL;
+  VkBuffer keygenXmssNodesBuffer = NULL;
+
+  VkDeviceMemory keygenIOStagingBufferMemory = NULL;
+  VkDeviceMemory keygenSha256StateStagingBufferMemory = NULL;
+  VkDeviceMemory keygenIOBufferMemory = NULL;
+  VkDeviceMemory keygenSha256StateBufferMemory = NULL;
+  VkDeviceMemory keygenWotsChainBufferMemory = NULL;
+  VkDeviceMemory keygenXmssNodesBufferMemory = NULL;
+
+  VkFence fence = NULL;
+
+  uint32_t keysChunkCount = keysCount;
+
+  // Scale the chunks size down until we meet device limits.
+  VkPhysicalDeviceLimits* limits = &ctx->primaryDeviceProperties.limits;
+  while (
+    numWorkGroups(keysChunkCount * SLHVK_XMSS_LEAVES * SLHVK_WOTS_CHAIN_COUNT) > limits->maxComputeWorkGroupCount[0] ||
+    N * keysChunkCount * SLHVK_WOTS_CHAIN_COUNT * SLHVK_XMSS_LEAVES > limits->maxStorageBufferRange
+  ) {
+    keysChunkCount >>= 1;
+  }
+
+  const size_t keygenIOBufferSize = keysChunkCount * N;
+  const size_t sha256StateBufferSize = keysChunkCount * 8 * sizeof(uint32_t);
+
+  /**************  Create keygen buffers  *******************/
+
+  VkBufferCreateInfo bufferCreateInfo = {
+    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE, // buffers are exclusive to a single queue family at a time.
+  };
+
+  bufferCreateInfo.size = keygenIOBufferSize;
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenIOBuffer);
+  if (err) goto cleanup;
+
+  bufferCreateInfo.size = sha256StateBufferSize;
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenSha256StateBuffer);
+  if (err) goto cleanup;
+
+  bufferCreateInfo.size = keysChunkCount * N * SLHVK_WOTS_CHAIN_COUNT * SLHVK_XMSS_LEAVES;
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenWotsChainBuffer);
+  if (err) goto cleanup;
+
+  bufferCreateInfo.size = keysChunkCount * N * SLHVK_XMSS_LEAVES;
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenXmssNodesBuffer);
+  if (err) goto cleanup;
+
+
+  /***************  Allocate keygen buffer memory backing  ********************/
+
+  VkBuffer keygenBuffers[KEYGEN_PIPELINE_DESCRIPTOR_COUNT] = {
+    keygenIOBuffer,
+    keygenSha256StateBuffer,
+    keygenWotsChainBuffer,
+    keygenXmssNodesBuffer,
+  };
+  VkDeviceMemory* keygenMemories[KEYGEN_PIPELINE_DESCRIPTOR_COUNT] = {
+    &keygenIOBufferMemory,
+    &keygenSha256StateBufferMemory,
+    &keygenWotsChainBufferMemory,
+    &keygenXmssNodesBufferMemory,
+  };
+
+  VkMemoryPropertyFlags deviceLocalMemFlags;
+  for (int i = 0; i < KEYGEN_PIPELINE_DESCRIPTOR_COUNT; i++) {
+    err = allocateBufferMemory(
+      ctx->primaryDevice,
+      ctx->primaryPhysicalDevice,
+      keygenBuffers[i],
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+      &deviceLocalMemFlags,
+      keygenMemories[i]
+    );
+    if (err) goto cleanup;
+  }
+
+  // If needed, allocate host-visible staging buffers to send the inputs and receive the outputs.
+  VkDeviceMemory shaStateInputMemory = keygenSha256StateBufferMemory;
+  VkDeviceMemory keygenIOMemory = keygenIOBufferMemory;
+
+  if (!(deviceLocalMemFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+    bufferCreateInfo.size = keysChunkCount * N;
+    bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                             VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                             VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenIOStagingBuffer);
+    if (err) goto cleanup;
+
+    bufferCreateInfo.size = keysChunkCount * 8 * sizeof(uint32_t);
+    bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenSha256StateStagingBuffer);
+    if (err) goto cleanup;
+
+
+    err = allocateBufferMemory(
+      ctx->primaryDevice,
+      ctx->primaryPhysicalDevice,
+      keygenIOStagingBuffer,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+      NULL,
+      &keygenIOStagingBufferMemory
+    );
+    if (err) goto cleanup;
+
+    err = allocateBufferMemory(
+      ctx->primaryDevice,
+      ctx->primaryPhysicalDevice,
+      keygenSha256StateStagingBuffer,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+      NULL,
+      &keygenSha256StateStagingBufferMemory
+    );
+    if (err) goto cleanup;
+
+    keygenIOMemory = keygenIOStagingBufferMemory;
+    shaStateInputMemory = keygenSha256StateStagingBufferMemory;
+  }
+
+  bindBuffersToDescriptorSet(
+    ctx->primaryDevice,
+    keygenBuffers,
+    KEYGEN_PIPELINE_DESCRIPTOR_COUNT,
+    ctx->keygenDescriptorSet
+  );
+
+  /********  allocate and fill a keygen command buffer  *********/
+
+  VkCommandBufferAllocateInfo cmdBufAllocInfo = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+    .commandPool = ctx->primaryCommandPool,
+    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    .commandBufferCount = 1,
+  };
+  VkCommandBuffer primaryKeygenCommandBuffer;
+  err = vkAllocateCommandBuffers(ctx->primaryDevice, &cmdBufAllocInfo, &primaryKeygenCommandBuffer);
+  if (err) goto cleanup;
+
+
+  VkCommandBufferBeginInfo cmdBufBeginInfo = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+  };
+  err = vkBeginCommandBuffer(primaryKeygenCommandBuffer, &cmdBufBeginInfo);
+  if (err) goto cleanup;
+
+  // If we needed a separate host-visible staging buffer, let's copy that to the device.
+  if (keygenIOMemory == keygenIOStagingBufferMemory) {
+    VkBufferCopy regions = { .size = keygenIOBufferSize };
+    vkCmdCopyBuffer(
+      primaryKeygenCommandBuffer,
+      keygenIOStagingBuffer, // src
+      keygenIOBuffer,        // dest
+      1, // region count
+      &regions // regions
+    );
+  }
+
+  // All keygen shaders share the same descriptor set (TODO)
+  vkCmdBindDescriptorSets(
+    primaryKeygenCommandBuffer,
+    VK_PIPELINE_BIND_POINT_COMPUTE,
+    ctx->keygenPipelineLayout,
+    0, // set number of first descriptor_set to be bound
+    1, // number of descriptor sets
+    &ctx->keygenDescriptorSet,
+    0,  // offset count
+    NULL // offsets array
+  );
+
+  // Provide the key count as a push constant.
+  vkCmdPushConstants(
+    primaryKeygenCommandBuffer,
+    ctx->keygenPipelineLayout,
+    VK_SHADER_STAGE_COMPUTE_BIT,
+    0, //  offset
+    sizeof(keysChunkCount),
+    &keysChunkCount
+  );
+
+  // Bind and dispatch the wots tips shader.
+  vkCmdBindPipeline(
+    primaryKeygenCommandBuffer,
+    VK_PIPELINE_BIND_POINT_COMPUTE,
+    ctx->keygenWotsTipsPipeline
+  );
+  vkCmdDispatch(
+    primaryKeygenCommandBuffer,
+    // One thread per chain in each key's root tree
+    numWorkGroups(keysChunkCount * SLHVK_XMSS_LEAVES * SLHVK_WOTS_CHAIN_COUNT),
+    1,  // Y dimension workgroups
+    1   // Z dimension workgroups
+  );
+
+  // Specify that the XMSS leaves shader depends on the WOTS chain buffer
+  // output from the WOTS tip shader.
+  VkMemoryBarrier memoryBarrier = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+    .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+    .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+  };
+  vkCmdPipelineBarrier(
+    primaryKeygenCommandBuffer,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+    0, // flags
+    1, &memoryBarrier, // VkMemoryBarrier[]
+    0, NULL,           // VkBufferMemoryBarrier[]
+    0, NULL            // VkImageMemoryBarrier[]
+  );
+
+  // Bind and dispatch the XMSS leaves shader.
+  vkCmdBindPipeline(
+    primaryKeygenCommandBuffer,
+    VK_PIPELINE_BIND_POINT_COMPUTE,
+    ctx->keygenXmssLeavesPipeline
+  );
+  vkCmdDispatch(
+    primaryKeygenCommandBuffer,
+    // One thread per chain in each key's root tree
+    numWorkGroups(keysChunkCount * SLHVK_XMSS_LEAVES),
+    1,  // Y dimension workgroups
+    1   // Z dimension workgroups
+  );
+
+  // Specify that the XMSS roots shader depends on the output of the XMSS leaves shader.
+  vkCmdPipelineBarrier(
+    primaryKeygenCommandBuffer,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+    0, // flags
+    1, &memoryBarrier, // VkMemoryBarrier[]
+    0, NULL,           // VkBufferMemoryBarrier[]
+    0, NULL            // VkImageMemoryBarrier[]
+  );
+
+  // Bind and dispatch the XMSS roots shader.
+  vkCmdBindPipeline(
+    primaryKeygenCommandBuffer,
+    VK_PIPELINE_BIND_POINT_COMPUTE,
+    ctx->keygenXmssRootsPipeline
+  );
+  vkCmdDispatch(
+    primaryKeygenCommandBuffer,
+    keysChunkCount, // One work group per XMSS tree root to generate.
+    1,  // Y dimension workgroups
+    1   // Z dimension workgroups
+  );
+
+  // Copy the output pubkey roots back to the staging IO buffer if needed.
+  if (keygenIOMemory == keygenIOStagingBufferMemory) {
+    VkBufferCopy regions = { .size = keygenIOBufferSize };
+    vkCmdCopyBuffer(
+      primaryKeygenCommandBuffer,
+      keygenIOBuffer,        // src
+      keygenIOStagingBuffer, // dest
+      1, // region count
+      &regions // regions
+    );
+  }
+
+  err = vkEndCommandBuffer(primaryKeygenCommandBuffer);
+  if (err) goto cleanup;
+
+
+  /*******  Fill the inputs and execute each chunk iteration  ******/
+
+  VkFenceCreateInfo fenceCreateInfo = { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+  err = vkCreateFence(ctx->primaryDevice, &fenceCreateInfo, NULL, &fence);
+  if (err) goto cleanup;
+
+  VkQueue primaryQueue;
+  vkGetDeviceQueue(ctx->primaryDevice, ctx->primaryDeviceQueueFamily, 0, &primaryQueue);
+
+  // Loop over each chunk of the inputs
+  for (uint32_t keysGenerated = 0; keysGenerated < keysCount; keysGenerated += keysChunkCount) {
+
+    // Write the skSeeds arrays to the input buffer.
+    uint32_t* mapped;
+    err = vkMapMemory(ctx->primaryDevice, keygenIOMemory, 0, keygenIOBufferSize, 0, (void**) &mapped);
+    if (err) goto cleanup;
+    for (uint32_t i = 0; i < keysChunkCount && keysGenerated + i < keysCount; i++) {
+      uint32_t offset = i * SLHVK_HASH_WORDS;
+      for (uint32_t j = 0; j < SLHVK_HASH_WORDS; j++) {
+        uint32_t j4 = j * sizeof(uint32_t);
+        mapped[offset + j] = ((uint32_t) skSeeds[keysGenerated + i][j4 + 0] << 24) |
+                             ((uint32_t) skSeeds[keysGenerated + i][j4 + 1] << 16) |
+                             ((uint32_t) skSeeds[keysGenerated + i][j4 + 2] << 8) |
+                             ((uint32_t) skSeeds[keysGenerated + i][j4 + 3] << 0);
+      }
+    }
+    vkUnmapMemory(ctx->primaryDevice, keygenIOMemory);
+
+    // Generate and write the sha256 midstates to the input buffer.
+    err = vkMapMemory(ctx->primaryDevice, shaStateInputMemory, 0, sha256StateBufferSize, 0, (void**) &mapped);
+    if (err) goto cleanup;
+    uint8_t block[64] = {0};
+    uint32_t sha256State[8];
+    for (uint32_t i = 0; i < keysChunkCount && keysGenerated + i < keysCount; i++) {
+      memcpy(sha256State, SHA256_INITIAL_STATE, sizeof(sha256State));
+      memcpy(block, pkSeeds[keysGenerated + i], N);
+      sha256_compress(sha256State, block);
+
+      uint32_t offset = i * 8;
+      for (uint32_t j = 0; j < 8; j++) {
+        mapped[offset + j] = sha256State[j];
+      }
+    }
+    vkUnmapMemory(ctx->primaryDevice, shaStateInputMemory);
+
+
+    VkSubmitInfo submitInfo = {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &primaryKeygenCommandBuffer,
+    };
+
+    err = vkQueueSubmit(primaryQueue, 1, &submitInfo, fence);
+    if (err) goto cleanup;
+    err = vkWaitForFences(ctx->primaryDevice, 1, &fence, VK_TRUE, 100e9);
+    if (err) goto cleanup;
+    err = vkResetFences(ctx->primaryDevice, 1, &fence);
+    if (err) goto cleanup;
+
+    // Read the pkRoots from the IO buffer.
+    uint8_t* pkRootsMapped;
+    err = vkMapMemory(ctx->primaryDevice, keygenIOMemory, 0, keygenIOBufferSize, 0, (void**) &pkRootsMapped);
+    if (err) goto cleanup;
+    for (uint32_t i = 0; i < keysChunkCount && keysGenerated + i < keysCount; i++) {
+      uint32_t offset = i * N;
+      for (uint32_t j = 0; j < N; j++) {
+        pkRootsOut[keysGenerated + i][j] = pkRootsMapped[offset + j];
+      }
+    }
+    vkUnmapMemory(ctx->primaryDevice, keygenIOMemory);
+  }
+
+cleanup:
+  vkDestroyFence(ctx->primaryDevice, fence, NULL);
+  vkDestroyBuffer(ctx->primaryDevice, keygenIOStagingBuffer, NULL);
+  vkDestroyBuffer(ctx->primaryDevice, keygenSha256StateStagingBuffer, NULL);
+  vkDestroyBuffer(ctx->primaryDevice, keygenIOBuffer, NULL);
+  vkDestroyBuffer(ctx->primaryDevice, keygenSha256StateBuffer, NULL);
+  vkDestroyBuffer(ctx->primaryDevice, keygenWotsChainBuffer, NULL);
+  vkDestroyBuffer(ctx->primaryDevice, keygenXmssNodesBuffer, NULL);
+  vkFreeMemory(ctx->primaryDevice, keygenIOStagingBufferMemory, NULL);
+  vkFreeMemory(ctx->primaryDevice, keygenSha256StateStagingBufferMemory, NULL);
+  vkFreeMemory(ctx->primaryDevice, keygenIOBufferMemory, NULL);
+  vkFreeMemory(ctx->primaryDevice, keygenSha256StateBufferMemory, NULL);
+  vkFreeMemory(ctx->primaryDevice, keygenWotsChainBufferMemory, NULL);
+  vkFreeMemory(ctx->primaryDevice, keygenXmssNodesBufferMemory, NULL);
   return err;
 }

@@ -26,3 +26,11 @@ int slhvkSignPure(
   size_t rawMessageSize,
   uint8_t signatureOutput[SLHVK_SIGNATURE_SIZE]
 );
+
+int slhvkKeygen(
+  SlhvkContext ctx,
+  uint32_t keysCount,
+  const uint8_t* const* skSeeds,
+  const uint8_t* const* pkSeeds,
+  uint8_t** pkRootsOut
+);

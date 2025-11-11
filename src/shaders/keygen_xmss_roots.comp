@@ -1,0 +1,107 @@
+#version 430
+#extension GL_GOOGLE_include_directive : enable
+#include "keygen_common.comp"
+
+const uint XMSS_NODES_SHARED_BUFFER_SIZE = XMSS_LEAVES * HASH_WORDS;
+
+// Merges two XMSS child node hashes at positions `lnode_pos` and `rnode_pos`
+// into a parent node hash at height `node_height` and index `node_index`.
+// The output is written to `xmss_node_states[lnode_pos]`.
+void xmss_node_merge(
+  uint key_index,
+  uint lnode_pos,
+  uint rnode_pos,
+  uint node_height,
+  uint node_index
+) {
+  uint schedule[64];
+  schedule[0] = ((HYPERTREE_LAYERS - 1) << 24);
+  schedule[1] = 0;
+  schedule[2] = (ADRS_TYPE_TREE << 16);
+  schedule[3] = node_height >> 16;
+  schedule[4] = (node_height << 16) | (node_index >> 16);
+  schedule[5] = (node_index << 16)  | (xmss_node_states[lnode_pos] >> 16);
+
+  for (uint i = 0; i < HASH_WORDS - 1; i++) {
+    schedule[6 + i] = (xmss_node_states[lnode_pos + i] << 16) |
+                      (xmss_node_states[lnode_pos + i + 1] >> 16);
+  }
+  schedule[6 + HASH_WORDS - 1] = (xmss_node_states[lnode_pos + HASH_WORDS - 1] << 16) |
+                                 (xmss_node_states[rnode_pos] >> 16);
+
+  // For 192-bit and 256-bit parameter sets, we must invoke the compression function twice.
+  if (HASH_WORDS > 4) {
+    // TODO: sha512
+  }
+  for (uint i = 0; i < HASH_WORDS - 1; i++) {
+    schedule[6 + HASH_WORDS + i] = (xmss_node_states[rnode_pos + i] << 16) |
+                                   (xmss_node_states[rnode_pos + i + 1] >> 16);
+  }
+  schedule[6 + 2 * HASH_WORDS - 1] =
+    (xmss_node_states[rnode_pos + HASH_WORDS - 1] << 16) | 0x8000;
+
+  // Padding
+  for (uint i = 6 + 2 * HASH_WORDS; i < 15; i++) {
+    schedule[i] = 0;
+  }
+
+  // msg_bit_len
+  schedule[15] = 8 * (64 + 22 + 2 * HASH_WORDS * 4);
+
+  uint sha_offset = key_index * 8;
+  uint s[8] = {
+    sha256_states[sha_offset + 0], sha256_states[sha_offset + 1],
+    sha256_states[sha_offset + 2], sha256_states[sha_offset + 3],
+    sha256_states[sha_offset + 4], sha256_states[sha_offset + 5],
+    sha256_states[sha_offset + 6], sha256_states[sha_offset + 7]
+  };
+  sha256_rounds_all(s, schedule);
+
+  // Write the compressed output to the left node position.
+  for (uint i = 0; i < HASH_WORDS; i++) {
+    xmss_node_states[lnode_pos + i] = s[i];
+  }
+}
+
+
+void main() {
+  // One work group per keypair we're generating.
+  uint local_id = gl_LocalInvocationID.x;
+  uint key_index = gl_WorkGroupID.x;
+
+  // Always generate the root XMSS tree.
+  uint layer_address = HYPERTREE_LAYERS - 1;
+
+  uint xmss_node_offset = key_index * XMSS_LEAVES * HASH_WORDS;
+
+  // For each layer in the XMSS tree:
+  for (uint node_height = 1; node_height <= XMSS_HEIGHT; node_height++) {
+    const uint next_level_nodes_len = 1 << (XMSS_HEIGHT - node_height);
+
+    uint prev_layer_node_offset = (1 << (node_height - 1)) * HASH_WORDS;
+
+    // Each thread may need to compute multiple nodes on this layer of the tree
+    for (uint node_index = local_id; node_index < next_level_nodes_len; node_index += gl_WorkGroupSize.x) {
+      uint left_child_index = node_index * 2;
+      uint right_child_index = node_index * 2 + 1;
+
+      uint lchild_offset = xmss_node_offset + left_child_index * prev_layer_node_offset;
+      uint rchild_offset = xmss_node_offset + right_child_index * prev_layer_node_offset;
+
+      xmss_node_merge(key_index, lchild_offset, rchild_offset, node_height, node_index);
+    }
+
+    // Synchronize the work group once each layer is computed. The next layer of nodes in each tree can only
+    // safely be computed if all child nodes are correctly populated in the xmss_node_states buffer.
+    barrier();
+  }
+
+  // Convert the XMSS root node to big-endian encoding and write it over
+  // the original skSeed input for extra safety and efficiency.
+  if (local_id == 0) {
+    uint offset = key_index * HASH_WORDS;
+    for (uint i = 0; i < HASH_WORDS; i++) {
+      sk_seeds[offset + i] = flip_endianness(xmss_node_states[xmss_node_offset + i]);
+    }
+  }
+}

@@ -1,0 +1,27 @@
+#include "common.comp"
+
+// Used to tell the shader how many keys we are generating in parallel.
+layout(push_constant) uniform pc {
+  uint keys_count;
+};
+
+// The secret key seeds for each of the key pairs.
+layout(binding = 0) buffer skseed {
+  uint sk_seeds[];
+};
+
+// The SHA256 states for each SLH-DSA key after absorbing the corresponding `pk_seed` and padding.
+layout(binding = 1) buffer shastate {
+  uint sha256_states[];
+};
+
+// The WOTS hash chain states. For all WOTS keypairs these will be filled with
+// hash chains iterated to their tips.
+layout(binding = 2) buffer chainstates {
+  uint hash_chain_states[];
+};
+
+// The compressed WOTS public keys hash output states.
+layout(binding = 3) buffer xmssnodes {
+  uint xmss_node_states[];
+};
