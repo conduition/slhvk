@@ -1380,6 +1380,15 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       1, // region count
       &regions // regions
     );
+
+    // Overwrite the SK seed in host-visible memory
+    vkCmdFillBuffer(
+      ctx->primaryHypertreePresignCommandBuffer,
+      ctx->primaryInputsBufferHostVisible,
+      0, // offset
+      VK_WHOLE_SIZE,
+      0 // data
+    );
   }
 
   // Bind and dispatch the WOTS tips precompute shader.
@@ -1506,6 +1515,15 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       &regions // regions
     );
 
+    // Overwrite the SK seed in host-visible memory
+    vkCmdFillBuffer(
+      ctx->secondaryForsCommandBuffer,
+      ctx->secondaryInputsBufferHostVisible,
+      0, // offset
+      VK_WHOLE_SIZE,
+      0 // data
+    );
+
     regions.size = FORS_MESSAGE_BUFFER_SIZE;
     vkCmdCopyBuffer(
       ctx->secondaryForsCommandBuffer,
@@ -1608,6 +1626,15 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     forsRootsCopyRegions
   );
 
+  // Overwrite the SK seed in device-local memory
+  vkCmdFillBuffer(
+    ctx->secondaryForsCommandBuffer,
+    ctx->secondaryInputsBufferDeviceLocal,
+    0, // offset
+    VK_WHOLE_SIZE,
+    0 // data
+  );
+
   err = vkEndCommandBuffer(ctx->secondaryForsCommandBuffer);
   if (err) goto cleanup;
 
@@ -1665,6 +1692,15 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       &regions // regions
     );
   }
+
+  // Overwrite the SK seed in device-local memory
+  vkCmdFillBuffer(
+    ctx->primaryHypertreeFinishCommandBuffer,
+    ctx->primaryInputsBufferDeviceLocal,
+    0, // offset
+    VK_WHOLE_SIZE,
+    0 // data
+  );
 
   err = vkEndCommandBuffer(ctx->primaryHypertreeFinishCommandBuffer);
   if (err) goto cleanup;
@@ -2196,6 +2232,10 @@ int slhvkKeygen(
       &regions // regions
     );
   }
+
+  // We don't need to overwrite the SK Seeds in keygenIOBuffer, because
+  // they are overwritten by the output of the XMSS roots shader on the device
+  // local buffer and (if applicable) copied over the original staging buffer inputs.
 
   err = vkEndCommandBuffer(primaryKeygenCommandBuffer);
   if (err) goto cleanup;
