@@ -4,9 +4,8 @@
 #include <string.h>
 #include <vulkan/vulkan.h>
 
-#include "params.h"
+#include "slhvk.h"
 #include "sha256.h"
-#include "context.h"
 #include "hashing.h"
 #include "shaders/wots_tips_precompute.h"
 #include "shaders/xmss_leaves_precompute.h"
@@ -44,7 +43,7 @@
 
 static bool isEnvFlagEnabled(const char* envVarName) {
   char* flagValue = getenv(envVarName);
-  return flagValue != NULL && strcmp(flagValue, "1") == 0;
+  return flagValue != NULL && (strcmp(flagValue, "1") == 0 || strcmp(flagValue, "true") == 0);
 }
 
 static uint32_t numWorkGroups(uint32_t threadsCount) {

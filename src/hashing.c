@@ -2,7 +2,7 @@
 #include <string.h>
 
 #include "sha256.h"
-#include "params.h"
+#include "slhvk.h"
 
 const uint64_t TREE_ADDRESS_MASK = ((uint64_t) 1 << (SLHVK_HYPERTREE_HEIGHT - SLHVK_XMSS_HEIGHT)) - 1;
 const uint32_t SIGNING_KEYPAIR_ADDRESS_MASK = (1 << SLHVK_XMSS_HEIGHT) - 1;

@@ -1,7 +1,7 @@
 #include <stdint.h>
 
 #include "sha256.h"
-#include "params.h"
+#include "slhvk.h"
 
 void slhvkHashForsRootsToWotsMessage(
   const uint8_t* forsRoots,

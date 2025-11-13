@@ -1,5 +1,5 @@
 CC     ?= cc
-CFLAGS += -O3 -Wall -Wextra -Werror=pedantic -Werror=vla
+CFLAGS += -O3 -Wall -Wextra -Werror=pedantic -Werror=vla -Iinclude
 
 HDR := $(wildcard src/*.h)
 SRC := $(wildcard src/*.c)

@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #include "../utils.h"
-#include "context.h"
+#include "slhvk.h"
 
 int main() {
   init_test();
