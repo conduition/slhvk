@@ -1945,7 +1945,7 @@ int slhvkKeygen(
   };
 
   bufferCreateInfo.size = keygenIOBufferSize;
-  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenIOBuffer);
   if (err) goto cleanup;
 
@@ -2068,6 +2068,17 @@ int slhvkKeygen(
       primaryKeygenCommandBuffer,
       keygenIOStagingBuffer, // src
       keygenIOBuffer,        // dest
+      1, // region count
+      &regions // regions
+    );
+  }
+
+  if (shaStateInputMemory == keygenSha256StateStagingBufferMemory) {
+    VkBufferCopy regions = { .size = sha256StateBufferSize };
+    vkCmdCopyBuffer(
+      primaryKeygenCommandBuffer,
+      keygenSha256StateStagingBuffer, // src
+      keygenSha256StateBuffer,        // dest
       1, // region count
       &regions // regions
     );
