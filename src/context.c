@@ -42,6 +42,11 @@
 
 #define N SLHVK_N
 
+static bool isEnvFlagEnabled(const char* envVarName) {
+  char* flagValue = getenv(envVarName);
+  return flagValue != NULL && strcmp(flagValue, "1") == 0;
+}
+
 static uint32_t numWorkGroups(uint32_t threadsCount) {
   return (threadsCount + SLHVK_DEFAULT_WORK_GROUP_SIZE - 1) / SLHVK_DEFAULT_WORK_GROUP_SIZE;
 }
@@ -456,8 +461,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   };
 
   // Try to enable validation layer if available.
-  char* enableValidationLayers = getenv("SLHVK_ENABLE_VALIDATION_LAYERS");
-  if (enableValidationLayers != NULL && strcmp(enableValidationLayers, "1") == 0) {
+  if (isEnvFlagEnabled("SLHVK_ENABLE_VALIDATION_LAYERS")) {
     uint32_t numLayerProperties;
     err = vkEnumerateInstanceLayerProperties(&numLayerProperties, NULL);
     if (err) goto cleanup;
@@ -510,6 +514,9 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     goto cleanup;
   }
 
+  bool forceCpu = isEnvFlagEnabled("SLHVK_FORCE_CPU");
+  bool forceGpu = isEnvFlagEnabled("SLHVK_FORCE_GPU");
+
   // Select a primary device (and secondary device too if one is available).
   for (uint32_t i = 0; i < physicalDevicesCount; i++) {
     int computeQueueFamily = findDeviceComputeQueueFamily(physicalDevices[i]);
@@ -517,6 +524,11 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
 
     VkPhysicalDeviceProperties deviceProps;
     vkGetPhysicalDeviceProperties(physicalDevices[i], &deviceProps);
+
+    if (forceCpu && deviceProps.deviceType != VK_PHYSICAL_DEVICE_TYPE_CPU)
+      continue;
+    if (forceGpu && deviceProps.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
+      continue;
 
     // First, use any two devices. Then, replace the primary and secondary devices if
     // we find any superior available devices.
