@@ -164,15 +164,13 @@ static void bindBuffersToDescriptorSet(
   uint32_t buffersCount,
   VkDescriptorSet descriptorSet
 ) {
-  VkMemoryRequirements memRequirements;
   for (uint32_t i = 0; i < buffersCount; i++) {
-    vkGetBufferMemoryRequirements(device, buffers[i], &memRequirements);
 
     // Specify the buffer to bind to the descriptor.
     VkDescriptorBufferInfo bufferInfo = {
       .buffer = buffers[i],
       .offset = 0,
-      .range = memRequirements.size,
+      .range = VK_WHOLE_SIZE,
     };
 
     VkWriteDescriptorSet writeDescriptorSet = {
