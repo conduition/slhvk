@@ -94,7 +94,7 @@ void slhvkMessagePrf(
   sha256_init(&hmacHashState);
   sha256_update(&hmacHashState, innerK, sizeof(innerK));
   sha256_update(&hmacHashState, optRand, SLHVK_N);
-  if (contextStringSize > 0) {
+  if (contextString != NULL) {
     uint8_t contextStringHeader[2] = { 0, contextStringSize };
     sha256_update(&hmacHashState, contextStringHeader, sizeof(contextStringHeader));
     sha256_update(&hmacHashState, contextString, contextStringSize);
@@ -130,7 +130,7 @@ void slhvkDigestAndSplitMsg(
   ShaContext shaCtxInner;
   sha256_clone(&shaCtxInner, &shaCtx);
   sha256_update(&shaCtxInner, pkRoot, SLHVK_N);
-  if (contextStringSize > 0) {
+  if (contextString != NULL) {
     uint8_t contextStringHeader[2] = { 0, contextStringSize };
     sha256_update(&shaCtxInner, contextStringHeader, sizeof(contextStringHeader));
     sha256_update(&shaCtxInner, contextString, contextStringSize);
