@@ -63,6 +63,9 @@ TEST_VEC_DIR    := tests/vectors
 # Build test binaries
 $(TEST_BIN):
 
+# build vendor objects (and don't delete them)
+$(TEST_VENDOR_OBJ):
+
 $(TEST_RUNNER): $(TEST_RUNNER_SRC) $(TEST_HDR)
 	$(CC) $(CFLAGS) -o $@ $<
 
