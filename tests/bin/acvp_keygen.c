@@ -71,6 +71,8 @@ int main() {
       eprintf("expected pkRoot: ");
       eprintHex(testCases[i].pkRoot, SLHVK_N);
       eprintf("\n\n");
+      err = -1;
+      goto cleanup;
     }
   }
 
