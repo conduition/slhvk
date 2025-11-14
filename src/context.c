@@ -335,103 +335,104 @@ typedef struct SlhvkContext_T {
 void slhvkContextFree(SlhvkContext_T* ctx) {
   if (ctx != NULL) {
     /********** Free device resources **********/
+    if (ctx->primaryDevice != NULL) {
+      // Primary device buffers
+      vkDestroyBuffer(ctx->primaryDevice, ctx->primaryInputsBufferDeviceLocal, NULL);
+      vkDestroyBuffer(ctx->primaryDevice, ctx->primaryInputsBufferHostVisible, NULL);
+      vkDestroyBuffer(ctx->primaryDevice, ctx->primaryWotsChainBuffer, NULL);
+      vkDestroyBuffer(ctx->primaryDevice, ctx->primaryXmssNodesBuffer, NULL);
+      vkDestroyBuffer(ctx->primaryDevice, ctx->primaryXmssMessagesBuffer, NULL);
+      vkDestroyBuffer(ctx->primaryDevice, ctx->primaryForsPubkeyStagingBuffer, NULL);
+      vkDestroyBuffer(ctx->primaryDevice, ctx->primaryHypertreeSignatureBufferDeviceLocal, NULL);
+      vkDestroyBuffer(ctx->primaryDevice, ctx->primaryHypertreeSignatureBufferHostVisible, NULL);
 
-    // Primary device buffers
-    vkDestroyBuffer(ctx->primaryDevice, ctx->primaryInputsBufferDeviceLocal, NULL);
-    vkDestroyBuffer(ctx->primaryDevice, ctx->primaryInputsBufferHostVisible, NULL);
-    vkDestroyBuffer(ctx->primaryDevice, ctx->primaryWotsChainBuffer, NULL);
-    vkDestroyBuffer(ctx->primaryDevice, ctx->primaryXmssNodesBuffer, NULL);
-    vkDestroyBuffer(ctx->primaryDevice, ctx->primaryXmssMessagesBuffer, NULL);
-    vkDestroyBuffer(ctx->primaryDevice, ctx->primaryForsPubkeyStagingBuffer, NULL);
-    vkDestroyBuffer(ctx->primaryDevice, ctx->primaryHypertreeSignatureBufferDeviceLocal, NULL);
-    vkDestroyBuffer(ctx->primaryDevice, ctx->primaryHypertreeSignatureBufferHostVisible, NULL);
+      // Secondary device buffers
+      vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryInputsBufferDeviceLocal, NULL);
+      vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryInputsBufferHostVisible, NULL);
+      vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryForsMessageBufferDeviceLocal, NULL);
+      vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryForsMessageBufferHostVisible, NULL);
+      vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryForsNodesBuffer, NULL);
+      vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryForsSignatureBufferDeviceLocal, NULL);
+      vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryForsSignatureBufferHostVisible, NULL);
+      vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryForsRootsBuffer, NULL);
 
-    // Secondary device buffers
-    vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryInputsBufferDeviceLocal, NULL);
-    vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryInputsBufferHostVisible, NULL);
-    vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryForsMessageBufferDeviceLocal, NULL);
-    vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryForsMessageBufferHostVisible, NULL);
-    vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryForsNodesBuffer, NULL);
-    vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryForsSignatureBufferDeviceLocal, NULL);
-    vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryForsSignatureBufferHostVisible, NULL);
-    vkDestroyBuffer(ctx->secondaryDevice, ctx->secondaryForsRootsBuffer, NULL);
+      // Primary device memory
+      vkFreeMemory(ctx->primaryDevice, ctx->primaryInputsBufferDeviceLocalMemory, NULL);
+      vkFreeMemory(ctx->primaryDevice, ctx->primaryInputsBufferHostVisibleMemory, NULL);
+      vkFreeMemory(ctx->primaryDevice, ctx->primaryWotsChainBufferMemory, NULL);
+      vkFreeMemory(ctx->primaryDevice, ctx->primaryXmssNodesBufferMemory, NULL);
+      vkFreeMemory(ctx->primaryDevice, ctx->primaryXmssMessagesBufferMemory, NULL);
+      vkFreeMemory(ctx->primaryDevice, ctx->primaryForsPubkeyStagingBufferMemory, NULL);
+      vkFreeMemory(ctx->primaryDevice, ctx->primaryHypertreeSignatureBufferDeviceLocalMemory, NULL);
+      vkFreeMemory(ctx->primaryDevice, ctx->primaryHypertreeSignatureBufferHostVisibleMemory, NULL);
 
-    // Primary device memory
-    vkFreeMemory(ctx->primaryDevice, ctx->primaryInputsBufferDeviceLocalMemory, NULL);
-    vkFreeMemory(ctx->primaryDevice, ctx->primaryInputsBufferHostVisibleMemory, NULL);
-    vkFreeMemory(ctx->primaryDevice, ctx->primaryWotsChainBufferMemory, NULL);
-    vkFreeMemory(ctx->primaryDevice, ctx->primaryXmssNodesBufferMemory, NULL);
-    vkFreeMemory(ctx->primaryDevice, ctx->primaryXmssMessagesBufferMemory, NULL);
-    vkFreeMemory(ctx->primaryDevice, ctx->primaryForsPubkeyStagingBufferMemory, NULL);
-    vkFreeMemory(ctx->primaryDevice, ctx->primaryHypertreeSignatureBufferDeviceLocalMemory, NULL);
-    vkFreeMemory(ctx->primaryDevice, ctx->primaryHypertreeSignatureBufferHostVisibleMemory, NULL);
+      // Secondary device memory
+      vkFreeMemory(ctx->secondaryDevice, ctx->secondaryInputsBufferDeviceLocalMemory, NULL);
+      vkFreeMemory(ctx->secondaryDevice, ctx->secondaryInputsBufferHostVisibleMemory, NULL);
+      vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsMessageBufferDeviceLocalMemory, NULL);
+      vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsMessageBufferHostVisibleMemory, NULL);
+      vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsNodesBufferMemory, NULL);
+      vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsSignatureBufferDeviceLocalMemory, NULL);
+      vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsSignatureBufferHostVisibleMemory, NULL);
+      vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsRootsBufferMemory, NULL);
 
-    // Secondary device memory
-    vkFreeMemory(ctx->secondaryDevice, ctx->secondaryInputsBufferDeviceLocalMemory, NULL);
-    vkFreeMemory(ctx->secondaryDevice, ctx->secondaryInputsBufferHostVisibleMemory, NULL);
-    vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsMessageBufferDeviceLocalMemory, NULL);
-    vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsMessageBufferHostVisibleMemory, NULL);
-    vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsNodesBufferMemory, NULL);
-    vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsSignatureBufferDeviceLocalMemory, NULL);
-    vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsSignatureBufferHostVisibleMemory, NULL);
-    vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsRootsBufferMemory, NULL);
+      // Keygen resources
+      vkDestroyShaderModule(ctx->primaryDevice, ctx->keygenWotsTipsShader, NULL);
+      vkDestroyShaderModule(ctx->primaryDevice, ctx->keygenXmssLeavesShader, NULL);
+      vkDestroyShaderModule(ctx->primaryDevice, ctx->keygenXmssRootsShader, NULL);
+      vkDestroyPipeline(ctx->primaryDevice, ctx->keygenWotsTipsPipeline, NULL);
+      vkDestroyPipeline(ctx->primaryDevice, ctx->keygenXmssLeavesPipeline, NULL);
+      vkDestroyPipeline(ctx->primaryDevice, ctx->keygenXmssRootsPipeline, NULL);
+      vkDestroyPipelineLayout(ctx->primaryDevice, ctx->keygenPipelineLayout, NULL);
+      vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->keygenDescriptorSetLayout, NULL);
 
-    // Keygen resources
-    vkDestroyShaderModule(ctx->primaryDevice, ctx->keygenWotsTipsShader, NULL);
-    vkDestroyShaderModule(ctx->primaryDevice, ctx->keygenXmssLeavesShader, NULL);
-    vkDestroyShaderModule(ctx->primaryDevice, ctx->keygenXmssRootsShader, NULL);
-    vkDestroyPipeline(ctx->primaryDevice, ctx->keygenWotsTipsPipeline, NULL);
-    vkDestroyPipeline(ctx->primaryDevice, ctx->keygenXmssLeavesPipeline, NULL);
-    vkDestroyPipeline(ctx->primaryDevice, ctx->keygenXmssRootsPipeline, NULL);
-    vkDestroyPipelineLayout(ctx->primaryDevice, ctx->keygenPipelineLayout, NULL);
-    vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->keygenDescriptorSetLayout, NULL);
+      // WOTS tip precompute pipeline
+      vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->wotsTipsPrecomputeDescriptorSetLayout, NULL);
+      vkDestroyPipeline(ctx->primaryDevice, ctx->wotsTipsPrecomputePipeline, NULL);
+      vkDestroyPipelineLayout(ctx->primaryDevice, ctx->wotsTipsPrecomputePipelineLayout, NULL);
+      vkDestroyShaderModule(ctx->primaryDevice, ctx->wotsTipsPrecomputeShader, NULL);
 
-    // WOTS tip precompute pipeline
-    vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->wotsTipsPrecomputeDescriptorSetLayout, NULL);
-    vkDestroyPipeline(ctx->primaryDevice, ctx->wotsTipsPrecomputePipeline, NULL);
-    vkDestroyPipelineLayout(ctx->primaryDevice, ctx->wotsTipsPrecomputePipelineLayout, NULL);
-    vkDestroyShaderModule(ctx->primaryDevice, ctx->wotsTipsPrecomputeShader, NULL);
+      // XMSS leaf precompute pipeline
+      vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->xmssLeavesPrecomputeDescriptorSetLayout, NULL);
+      vkDestroyPipeline(ctx->primaryDevice, ctx->xmssLeavesPrecomputePipeline, NULL);
+      vkDestroyPipelineLayout(ctx->primaryDevice, ctx->xmssLeavesPrecomputePipelineLayout, NULL);
+      vkDestroyShaderModule(ctx->primaryDevice, ctx->xmssLeavesPrecomputeShader, NULL);
 
-    // XMSS leaf precompute pipeline
-    vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->xmssLeavesPrecomputeDescriptorSetLayout, NULL);
-    vkDestroyPipeline(ctx->primaryDevice, ctx->xmssLeavesPrecomputePipeline, NULL);
-    vkDestroyPipelineLayout(ctx->primaryDevice, ctx->xmssLeavesPrecomputePipelineLayout, NULL);
-    vkDestroyShaderModule(ctx->primaryDevice, ctx->xmssLeavesPrecomputeShader, NULL);
+      // XMSS merkle sign pipeline
+      vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->xmssMerkleSignDescriptorSetLayout, NULL);
+      vkDestroyPipeline(ctx->primaryDevice, ctx->xmssMerkleSignPipeline, NULL);
+      vkDestroyPipelineLayout(ctx->primaryDevice, ctx->xmssMerkleSignPipelineLayout, NULL);
+      vkDestroyShaderModule(ctx->primaryDevice, ctx->xmssMerkleSignShader, NULL);
 
-    // XMSS merkle sign pipeline
-    vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->xmssMerkleSignDescriptorSetLayout, NULL);
-    vkDestroyPipeline(ctx->primaryDevice, ctx->xmssMerkleSignPipeline, NULL);
-    vkDestroyPipelineLayout(ctx->primaryDevice, ctx->xmssMerkleSignPipelineLayout, NULL);
-    vkDestroyShaderModule(ctx->primaryDevice, ctx->xmssMerkleSignShader, NULL);
+      // WOTS sign pipeline
+      vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->wotsSignDescriptorSetLayout, NULL);
+      vkDestroyPipeline(ctx->primaryDevice, ctx->wotsSignPipeline, NULL);
+      vkDestroyPipelineLayout(ctx->primaryDevice, ctx->wotsSignPipelineLayout, NULL);
+      vkDestroyShaderModule(ctx->primaryDevice, ctx->wotsSignShader, NULL);
 
-    // WOTS sign pipeline
-    vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->wotsSignDescriptorSetLayout, NULL);
-    vkDestroyPipeline(ctx->primaryDevice, ctx->wotsSignPipeline, NULL);
-    vkDestroyPipelineLayout(ctx->primaryDevice, ctx->wotsSignPipelineLayout, NULL);
-    vkDestroyShaderModule(ctx->primaryDevice, ctx->wotsSignShader, NULL);
+      // FORS leaves gen pipeline
+      vkDestroyDescriptorSetLayout(ctx->secondaryDevice, ctx->forsLeavesGenDescriptorSetLayout, NULL);
+      vkDestroyPipeline(ctx->secondaryDevice, ctx->forsLeavesGenPipeline, NULL);
+      vkDestroyPipelineLayout(ctx->secondaryDevice, ctx->forsLeavesGenPipelineLayout, NULL);
+      vkDestroyShaderModule(ctx->secondaryDevice, ctx->forsLeavesGenShader, NULL);
 
-    // FORS leaves gen pipeline
-    vkDestroyDescriptorSetLayout(ctx->secondaryDevice, ctx->forsLeavesGenDescriptorSetLayout, NULL);
-    vkDestroyPipeline(ctx->secondaryDevice, ctx->forsLeavesGenPipeline, NULL);
-    vkDestroyPipelineLayout(ctx->secondaryDevice, ctx->forsLeavesGenPipelineLayout, NULL);
-    vkDestroyShaderModule(ctx->secondaryDevice, ctx->forsLeavesGenShader, NULL);
+      // FORS merkle sign pipeline
+      vkDestroyDescriptorSetLayout(ctx->secondaryDevice, ctx->forsMerkleSignDescriptorSetLayout, NULL);
+      vkDestroyPipeline(ctx->secondaryDevice, ctx->forsMerkleSignPipeline, NULL);
+      vkDestroyPipelineLayout(ctx->secondaryDevice, ctx->forsMerkleSignPipelineLayout, NULL);
+      vkDestroyShaderModule(ctx->secondaryDevice, ctx->forsMerkleSignShader, NULL);
 
-    // FORS merkle sign pipeline
-    vkDestroyDescriptorSetLayout(ctx->secondaryDevice, ctx->forsMerkleSignDescriptorSetLayout, NULL);
-    vkDestroyPipeline(ctx->secondaryDevice, ctx->forsMerkleSignPipeline, NULL);
-    vkDestroyPipelineLayout(ctx->secondaryDevice, ctx->forsMerkleSignPipelineLayout, NULL);
-    vkDestroyShaderModule(ctx->secondaryDevice, ctx->forsMerkleSignShader, NULL);
+      // primary device-wide resources
+      vkDestroyCommandPool(ctx->primaryDevice, ctx->primaryCommandPool, NULL);
+      vkDestroyDescriptorPool(ctx->primaryDevice, ctx->primaryDescriptorPool, NULL);
+      vkDestroyDevice(ctx->primaryDevice, NULL);
 
-    // primary device-wide resources
-    vkDestroyCommandPool(ctx->primaryDevice, ctx->primaryCommandPool, NULL);
-    vkDestroyDescriptorPool(ctx->primaryDevice, ctx->primaryDescriptorPool, NULL);
-    vkDestroyDevice(ctx->primaryDevice, NULL);
-
-    // secondary device wide resources (if not the same as the primary device)
-    if (ctx->secondaryDevice != ctx->primaryDevice) {
-      vkDestroyCommandPool(ctx->secondaryDevice, ctx->secondaryCommandPool, NULL);
-      vkDestroyDescriptorPool(ctx->secondaryDevice, ctx->secondaryDescriptorPool, NULL);
-      vkDestroyDevice(ctx->secondaryDevice, NULL);
+      // secondary device wide resources (if not the same as the primary device)
+      if (ctx->secondaryDevice != ctx->primaryDevice) {
+        vkDestroyCommandPool(ctx->secondaryDevice, ctx->secondaryCommandPool, NULL);
+        vkDestroyDescriptorPool(ctx->secondaryDevice, ctx->secondaryDescriptorPool, NULL);
+        vkDestroyDevice(ctx->secondaryDevice, NULL);
+      }
     }
 
     vkDestroyInstance(ctx->instance, NULL);
