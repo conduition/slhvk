@@ -7,7 +7,7 @@
 #include "slhvk.h"
 
 int main() {
-  init_test();
+  initTest();
 
   SlhvkContext ctx;
   int err = slhvkContextInit(&ctx);
@@ -34,7 +34,7 @@ int main() {
 
   int nRuns = 0;
   Time start, end;
-  get_time(&start);
+  getTime(&start);
   do {
     err = slhvkKeygen(ctx, KEYGEN_RUNS, skSeeds, pkSeeds, pkRootsPtr);
     if (err) {
@@ -42,10 +42,10 @@ int main() {
       goto cleanup;
     }
     nRuns += KEYGEN_RUNS;
-    get_time(&end);
-  } while (time_delta_ms(start, end) < 5000.0);
+    getTime(&end);
+  } while (timeDeltaMillis(start, end) < 5000.0);
 
-  printf("took %.2f ms per key gen\n", time_delta_ms(start, end) / (double) nRuns);
+  printf("took %.2f ms per key gen\n", timeDeltaMillis(start, end) / (double) nRuns);
 
   // memcpy(pkRoot, pkRoots[0], SLHVK_N);
   // printf("generated pk_root: ");

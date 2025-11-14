@@ -14,7 +14,7 @@ void eprintHex(const uint8_t* data, size_t len) {
 }
 
 int main() {
-  init_test();
+  initTest();
 
   SlhvkContext ctx;
   int err = slhvkContextInit(&ctx);
@@ -34,7 +34,7 @@ int main() {
 
   uint8_t slhDsaSignature[SLHVK_SIGNATURE_SIZE];
   Time start, end;
-  get_time(&start);
+  getTime(&start);
 
   for (int i = 0; i < testCasesCount; i++) {
     err = slhvkSignPure(
@@ -61,9 +61,9 @@ int main() {
       goto cleanup;
     }
   }
-  get_time(&end);
+  getTime(&end);
 
-  printf("computed %d valid signatures in %.2f ms\n", testCasesCount, time_delta_ms(start, end));
+  printf("computed %d valid signatures in %.2f ms\n", testCasesCount, timeDeltaMillis(start, end));
 
 cleanup:
   slhvkContextFree(ctx);

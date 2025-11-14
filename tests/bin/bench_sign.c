@@ -5,7 +5,7 @@
 #include "slhvk.h"
 
 int main() {
-  init_test();
+  initTest();
 
   SlhvkContext ctx;
   int err = slhvkContextInit(&ctx);
@@ -29,7 +29,7 @@ int main() {
 
   int nRuns = 0;
   Time start, end;
-  get_time(&start);
+  getTime(&start);
   #define SIGNING_RUNS 100
   do {
     for (int i = 0; i < SIGNING_RUNS; i++) {
@@ -52,14 +52,14 @@ int main() {
       }
     }
     nRuns += SIGNING_RUNS;
-    get_time(&end);
-  } while (time_delta_ms(start, end) < 5000.0);
+    getTime(&end);
+  } while (timeDeltaMillis(start, end) < 5000.0);
 
   // for (int i = 0; i < SLHVK_SIGNATURE_SIZE; i++)
   //   printf("%02x", slhDsaSignature[i]);
   // printf("\n");
 
-  printf("took %.2f ms per signature\n", time_delta_ms(start, end) / (double) nRuns);
+  printf("took %.2f ms per signature\n", timeDeltaMillis(start, end) / (double) nRuns);
 
 cleanup:
   slhvkContextFree(ctx);

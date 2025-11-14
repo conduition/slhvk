@@ -14,7 +14,7 @@ void eprintHex(const uint8_t* data, size_t len) {
 }
 
 int main() {
-  init_test();
+  initTest();
 
   SlhvkContext ctx;
   int err = slhvkContextInit(&ctx);
@@ -45,15 +45,15 @@ int main() {
 
 
   Time start, end;
-  get_time(&start);
+  getTime(&start);
   err = slhvkKeygen(ctx, testCasesCount, skSeeds, pkSeeds, pkRoots);
   if (err) {
     eprintf("failed to run keygen: %d\n", err);
     goto cleanup;
   }
-  get_time(&end);
+  getTime(&end);
 
-  printf("computed %d pk roots in %.2f ms\n", testCasesCount, time_delta_ms(start, end));
+  printf("computed %d pk roots in %.2f ms\n", testCasesCount, timeDeltaMillis(start, end));
 
   for (int i = 0; i < testCasesCount; i++) {
     if (memcmp(testCases[i].pkRoot, pkRoots[i], SLHVK_N) != 0) {
