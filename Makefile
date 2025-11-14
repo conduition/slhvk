@@ -51,11 +51,14 @@ TEST_RUNNER     := tests/runner
 TEST_RUNNER_SRC := $(TEST_RUNNER).c
 TEST_SRC        := $(wildcard tests/bin/*.c)
 TEST_BIN        := $(TEST_SRC:.c=.test)
-TEST_HDR        := tests/utils.h
+TEST_VENDOR_SRC := tests/vendor/cJSON.c
+TEST_VENDOR_OBJ := $(TEST_VENDOR_SRC:.c=.o)
+TEST_HDR        := tests/utils.h tests/acvp.h
 TEST_CFLAGS     := $(CFLAGS) -Isrc -Llib
+TEST_VEC_DIR    := tests/vectors
 
-%.test: %.c $(TEST_HDR) $(HDR) lib/libslhvk.a
-	$(CC) $(TEST_CFLAGS) -o $@ $< -lslhvk -lvulkan
+%.test: %.c $(TEST_HDR) $(HDR) lib/libslhvk.a $(TEST_VENDOR_OBJ)
+	$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_VENDOR_OBJ) -lslhvk -lvulkan
 
 # Build test binaries
 $(TEST_BIN):
@@ -64,10 +67,12 @@ $(TEST_RUNNER): $(TEST_RUNNER_SRC) $(TEST_HDR)
 	$(CC) $(CFLAGS) -o $@ $<
 
 .PHONY: test
-test: $(TEST_RUNNER) $(TEST_BIN)
+test: $(TEST_RUNNER) $(TEST_BIN) $(TEST_VEC_DIR)
 	./$(TEST_RUNNER)
 
+$(TEST_VEC_DIR):
+	./download_test_vectors.py
 
 .PHONY: clean
 clean:
-	rm -rf $(OBJ) lib $(SHADER_DIR)/*.h $(SHADER_DIR)/*.spv tests/bin/*.test $(TEST_RUNNER)
+	rm -rf $(OBJ) lib $(SHADER_DIR)/*.h $(SHADER_DIR)/*.spv tests/bin/*.test $(TEST_RUNNER) $(TEST_VEC_DIR)

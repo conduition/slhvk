@@ -58,3 +58,4 @@ dkms.conf
 src/shaders/*.h
 *.test
 tests/runner
+tests/vectors
