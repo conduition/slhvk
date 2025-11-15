@@ -1,0 +1,41 @@
+#version 430
+#extension GL_GOOGLE_include_directive : enable
+#include "common.comp"
+
+struct ForsMerkleProof {
+  uint preimage[HASH_WORDS];
+  uint merkle_path[FORS_TREE_HEIGHT * HASH_WORDS];
+};
+
+struct XmssSignature {
+  uint wots_hashes[WOTS_CHAIN_COUNT * HASH_WORDS];
+  uint xmss_merkle_path[XMSS_HEIGHT * HASH_WORDS];
+};
+
+struct SlhDsaSignatureVerifyRequest {
+  uint pk_seed[HASH_WORDS];
+  uint signing_keypair_address;
+  uint64 tree_address;
+  uint fors_indices[FORS_TREE_COUNT];
+  ForsMerkleProof fors_merkle_proofs[FORS_TREE_COUNT];
+  XmssSignature xmss_signatures[HYPERTREE_LAYERS];
+};
+
+layout(push_constant) uniform pc {
+  uint signatures_len;
+};
+
+layout(binding = 0) buffer sig {
+  SlhDsaSignatureVerifyRequest signatures[];
+};
+
+layout(binding = 1) buffer res {
+  uint verify_results[];
+};
+
+void main() {
+  uint thread_id = gl_GlobalInvocationID.x;
+  if (thread_id >= signatures_len) return;
+
+  verify_results[thread_id] = signatures[thread_id].pk_seed[0];
+}

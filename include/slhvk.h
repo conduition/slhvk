@@ -91,3 +91,16 @@ int slhvkKeygen(
   const uint8_t* const* pkSeeds,
   uint8_t** pkRootsOut
 );
+
+int slhvkVerifyPure(
+  SlhvkContext ctx,
+  uint32_t signaturesLen,
+  const uint8_t* contextString,
+  uint8_t contextStringSize,
+  const uint8_t* const* pkSeeds,
+  const uint8_t* const* pkRoots,
+  const uint8_t* const* signatures,
+  const uint8_t* const* messages,
+  const size_t* messageSizes,
+  uint32_t* verifyResultsOut
+);

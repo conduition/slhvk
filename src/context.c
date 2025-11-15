@@ -13,6 +13,7 @@
 #include "shaders/keygen_wots_tips.h"
 #include "shaders/keygen_xmss_leaves.h"
 #include "shaders/keygen_xmss_roots.h"
+#include "shaders/verify.h"
 #include "shaders/wots_sign.h"
 #include "shaders/fors_leaves_gen.h"
 #include "shaders/fors_merkle_sign.h"
@@ -33,6 +34,7 @@
 #define XMSS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT 4
 #define WOTS_SIGN_PIPELINE_DESCRIPTOR_COUNT 3
 #define KEYGEN_PIPELINE_DESCRIPTOR_COUNT 4
+#define VERIFY_PIPELINE_DESCRIPTOR_COUNT 2
 
 #define FORS_LEAVES_GEN_PIPELINE_DESCRIPTOR_COUNT 4
 #define FORS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT 4
@@ -40,6 +42,11 @@
 #define SPEC_CONSTANTS_COUNT 1
 
 #define N SLHVK_N
+
+static size_t min(size_t x, size_t y) {
+  if (x < y) return x;
+  return y;
+}
 
 static bool isEnvFlagEnabled(const char* envVarName) {
   char* flagValue = getenv(envVarName);
@@ -254,6 +261,13 @@ typedef struct SlhvkContext_T {
   VkDescriptorSetLayout keygenDescriptorSetLayout;
   VkDescriptorSet       keygenDescriptorSet;
 
+  /********  Verify resources  **********/
+  VkShaderModule        verifyShader;
+  VkPipeline            verifyPipeline;
+  VkPipelineLayout      verifyPipelineLayout;
+  VkDescriptorSetLayout verifyDescriptorSetLayout;
+  VkDescriptorSet       verifyDescriptorSet;
+
   // primary device buffers
   VkBuffer primaryInputsBufferDeviceLocal;
   VkBuffer primaryInputsBufferHostVisible;
@@ -385,6 +399,12 @@ void slhvkContextFree(SlhvkContext_T* ctx) {
       vkDestroyPipeline(ctx->primaryDevice, ctx->keygenXmssRootsPipeline, NULL);
       vkDestroyPipelineLayout(ctx->primaryDevice, ctx->keygenPipelineLayout, NULL);
       vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->keygenDescriptorSetLayout, NULL);
+
+      // Verify resources
+      vkDestroyShaderModule(ctx->primaryDevice, ctx->verifyShader, NULL);
+      vkDestroyPipeline(ctx->primaryDevice, ctx->verifyPipeline, NULL);
+      vkDestroyPipelineLayout(ctx->primaryDevice, ctx->verifyPipelineLayout, NULL);
+      vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->verifyDescriptorSetLayout, NULL);
 
       // WOTS tip precompute pipeline
       vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->wotsTipsPrecomputeDescriptorSetLayout, NULL);
@@ -917,6 +937,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   err = setupDescriptorSetLayout(
+    ctx->primaryDevice,
+    VERIFY_PIPELINE_DESCRIPTOR_COUNT,
+    &ctx->verifyDescriptorSetLayout
+  );
+  if (err) goto cleanup;
+
+  err = setupDescriptorSetLayout(
     ctx->secondaryDevice,
     FORS_LEAVES_GEN_PIPELINE_DESCRIPTOR_COUNT,
     &ctx->forsLeavesGenDescriptorSetLayout
@@ -989,6 +1016,15 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   );
   if (err) goto cleanup;
 
+  pipelineLayoutCreateInfo.pSetLayouts = &ctx->verifyDescriptorSetLayout,
+  err = vkCreatePipelineLayout(
+    ctx->primaryDevice,
+    &pipelineLayoutCreateInfo,
+    NULL,
+    &ctx->verifyPipelineLayout
+  );
+  if (err) goto cleanup;
+
   pipelineLayoutCreateInfo.pPushConstantRanges = NULL;
   pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
 
@@ -1037,6 +1073,10 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
 
   descriptorSetAllocateInfo.pSetLayouts = &ctx->keygenDescriptorSetLayout;
   err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->keygenDescriptorSet);
+  if (err) goto cleanup;
+
+  descriptorSetAllocateInfo.pSetLayouts = &ctx->verifyDescriptorSetLayout;
+  err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->verifyDescriptorSet);
   if (err) goto cleanup;
 
 
@@ -1172,6 +1212,11 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->keygenXmssRootsShader);
   if (err) goto cleanup;
 
+  shaderCreateInfo.pCode = (uint32_t*) verify_spv;
+  shaderCreateInfo.codeSize = verify_spv_len;
+  err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->verifyShader);
+  if (err) goto cleanup;
+
   shaderCreateInfo.pCode = (uint32_t*) fors_leaves_gen_spv,
   shaderCreateInfo.codeSize = fors_leaves_gen_spv_len,
   err = vkCreateShaderModule(ctx->secondaryDevice, &shaderCreateInfo, NULL, &ctx->forsLeavesGenShader);
@@ -1301,6 +1346,18 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     &pipelineCreateInfo,
     NULL,
     &ctx->keygenXmssRootsPipeline
+  );
+  if (err) goto cleanup;
+
+  pipelineCreateInfo.stage.module = ctx->verifyShader;
+  pipelineCreateInfo.layout       = ctx->verifyPipelineLayout;
+  err = vkCreateComputePipelines(
+    ctx->primaryDevice,
+    VK_NULL_HANDLE, // pipeline cache, TODO
+    1,
+    &pipelineCreateInfo,
+    NULL,
+    &ctx->verifyPipeline
   );
   if (err) goto cleanup;
 
@@ -2319,5 +2376,315 @@ cleanup:
   vkFreeMemory(ctx->primaryDevice, keygenSha256StateBufferMemory, NULL);
   vkFreeMemory(ctx->primaryDevice, keygenWotsChainBufferMemory, NULL);
   vkFreeMemory(ctx->primaryDevice, keygenXmssNodesBufferMemory, NULL);
+  return err;
+}
+
+
+#define SIGNATURE_WORDS_WITHOUT_RANDOMIZER ((SLHVK_FORS_SIGNATURE_SIZE + SLHVK_HYPERTREE_SIGNATURE_SIZE) / sizeof(uint32_t))
+
+typedef struct SlhvkSignatureVerifyRequest {
+  uint32_t pkSeed[SLHVK_HASH_WORDS];
+  uint32_t signingKeypairAddress;
+  uint32_t treeAddress[2]; // dont use uint64_t, to avoid alignment issues
+  uint32_t forsIndices[SLHVK_FORS_TREE_COUNT];
+  uint32_t signature[SIGNATURE_WORDS_WITHOUT_RANDOMIZER];
+} SlhvkSignatureVerifyRequest;
+
+int slhvkVerifyPure(
+  SlhvkContext ctx,
+  uint32_t signaturesLen,
+  const uint8_t* contextString,
+  uint8_t contextStringSize,
+  const uint8_t* const* pkSeeds,
+  const uint8_t* const* pkRoots,
+  const uint8_t* const* signatures,
+  const uint8_t* const* messages,
+  const size_t* messageSizes,
+  uint32_t* verifyResultsOut
+) {
+  int err = 0;
+  VkBuffer signaturesBuffer = NULL;
+  VkBuffer signaturesStagingBuffer = NULL;
+  VkBuffer verifyResultsBuffer = NULL;
+  VkBuffer verifyResultsStagingBuffer = NULL;
+
+  VkDeviceMemory signaturesBufferMemory = NULL;
+  VkDeviceMemory signaturesStagingBufferMemory = NULL;
+  VkDeviceMemory verifyResultsBufferMemory = NULL;
+  VkDeviceMemory verifyResultsStagingBufferMemory = NULL;
+
+  VkFence fence = NULL;
+
+  // TODO: compute dynamically
+  const uint32_t signaturesChunkCount = signaturesLen > 1024 ? signaturesLen : 1024;
+
+  const size_t signaturesBufferSize = signaturesChunkCount * sizeof(SlhvkSignatureVerifyRequest);
+  const size_t verifyResultsBufferSize = signaturesChunkCount * sizeof(uint32_t);
+
+
+  /**********  Create verification buffers  *************/
+
+  VkBufferCreateInfo bufferCreateInfo = {
+    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE, // buffers are exclusive to a single queue family at a time.
+  };
+
+  bufferCreateInfo.size = signaturesBufferSize;
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &signaturesBuffer);
+  if (err) goto cleanup;
+
+  bufferCreateInfo.size = signaturesBufferSize;
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &verifyResultsBuffer);
+  if (err) goto cleanup;
+
+
+  /**************  Allocate verification buffer memory  ***************/
+
+  VkMemoryPropertyFlags signaturesBufMemFlags;
+  VkMemoryPropertyFlags verifyResultsBufMemFlags;
+
+  err = allocateBufferMemory(
+    ctx->primaryDevice,
+    ctx->primaryPhysicalDevice,
+    signaturesBuffer,
+    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    &signaturesBufMemFlags,
+    &signaturesBufferMemory
+  );
+  if (err) goto cleanup;
+
+  err = allocateBufferMemory(
+    ctx->primaryDevice,
+    ctx->primaryPhysicalDevice,
+    verifyResultsBuffer,
+    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    &verifyResultsBufMemFlags,
+    &verifyResultsBufferMemory
+  );
+  if (err) goto cleanup;
+
+  VkDeviceMemory signaturesInputMemory = signaturesBufferMemory;
+  VkDeviceMemory verifyResultsOutputMemory = verifyResultsBufferMemory;
+
+  // Allocate host-visible buffer and memory if needed
+  if (!(signaturesBufMemFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+    bufferCreateInfo.size = signaturesBufferSize;
+    bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &signaturesStagingBuffer);
+    if (err) goto cleanup;
+
+    err = allocateBufferMemory(
+      ctx->primaryDevice,
+      ctx->primaryPhysicalDevice,
+      signaturesStagingBuffer,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+      NULL,
+      &signaturesStagingBufferMemory
+    );
+    if (err) goto cleanup;
+    signaturesInputMemory = signaturesStagingBufferMemory;
+  }
+  if (!(verifyResultsBufMemFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+    bufferCreateInfo.size = verifyResultsBufferSize;
+    bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &verifyResultsStagingBuffer);
+    if (err) goto cleanup;
+
+    err = allocateBufferMemory(
+      ctx->primaryDevice,
+      ctx->primaryPhysicalDevice,
+      verifyResultsStagingBuffer,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+      NULL,
+      &verifyResultsStagingBufferMemory
+    );
+    if (err) goto cleanup;
+    verifyResultsOutputMemory = verifyResultsStagingBufferMemory;
+  }
+
+  VkBuffer verifyBuffers[VERIFY_PIPELINE_DESCRIPTOR_COUNT] = { signaturesBuffer, verifyResultsBuffer };
+  bindBuffersToDescriptorSet(
+    ctx->primaryDevice,
+    verifyBuffers,
+    VERIFY_PIPELINE_DESCRIPTOR_COUNT,
+    ctx->verifyDescriptorSet
+  );
+
+
+
+  /********  allocate and fill a verification command buffer  *********/
+
+  VkCommandBufferAllocateInfo cmdBufAllocInfo = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+    .commandPool = ctx->primaryCommandPool,
+    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    .commandBufferCount = 1,
+  };
+  VkCommandBuffer verifyCommandBuffer;
+  err = vkAllocateCommandBuffers(ctx->primaryDevice, &cmdBufAllocInfo, &verifyCommandBuffer);
+  if (err) goto cleanup;
+
+
+  VkCommandBufferBeginInfo cmdBufBeginInfo = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+  };
+  err = vkBeginCommandBuffer(verifyCommandBuffer, &cmdBufBeginInfo);
+  if (err) goto cleanup;
+
+  // If we needed a separate host-visible staging buffer, let's copy that to the device.
+  if (signaturesInputMemory == signaturesStagingBufferMemory) {
+    VkBufferCopy regions = { .size = signaturesBufferSize };
+    vkCmdCopyBuffer(
+      verifyCommandBuffer,
+      signaturesStagingBuffer, // src
+      signaturesBuffer,        // dest
+      1, // region count
+      &regions // regions
+    );
+  }
+
+  vkCmdBindDescriptorSets(
+    verifyCommandBuffer,
+    VK_PIPELINE_BIND_POINT_COMPUTE,
+    ctx->verifyPipelineLayout,
+    0, // set number of first descriptor_set to be bound
+    1, // number of descriptor sets
+    &ctx->verifyDescriptorSet,
+    0,  // offset count
+    NULL // offsets array
+  );
+
+  // Provide the signatures count as a push constant.
+  vkCmdPushConstants(
+    verifyCommandBuffer,
+    ctx->verifyPipelineLayout,
+    VK_SHADER_STAGE_COMPUTE_BIT,
+    0, //  offset
+    sizeof(signaturesChunkCount),
+    &signaturesChunkCount
+  );
+
+  // Bind and dispatch the verification shader.
+  vkCmdBindPipeline(
+    verifyCommandBuffer,
+    VK_PIPELINE_BIND_POINT_COMPUTE,
+    ctx->verifyPipeline
+  );
+  vkCmdDispatch(
+    verifyCommandBuffer,
+    numWorkGroups(signaturesChunkCount), // One thread per signature
+    1,  // Y dimension workgroups
+    1   // Z dimension workgroups
+  );
+
+  // Copy the output pubkey roots back to the staging IO buffer if needed.
+  if (verifyResultsOutputMemory == verifyResultsStagingBufferMemory) {
+    VkBufferCopy regions = { .size = verifyResultsBufferSize };
+    vkCmdCopyBuffer(
+      verifyCommandBuffer,
+      verifyResultsBuffer,        // src
+      verifyResultsStagingBuffer, // dest
+      1, // region count
+      &regions // regions
+    );
+  }
+
+  err = vkEndCommandBuffer(verifyCommandBuffer);
+  if (err) goto cleanup;
+
+
+  /**********  Submit the command buffer once per chunk of signatures  *********/
+
+  VkFenceCreateInfo fenceCreateInfo = { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+  err = vkCreateFence(ctx->primaryDevice, &fenceCreateInfo, NULL, &fence);
+  if (err) goto cleanup;
+
+  VkQueue primaryQueue;
+  vkGetDeviceQueue(ctx->primaryDevice, ctx->primaryDeviceQueueFamily, 0, &primaryQueue);
+
+  uint32_t forsIndices[SLHVK_FORS_TREE_COUNT];
+  for (uint32_t sigsChecked = 0; sigsChecked < signaturesLen; sigsChecked += signaturesChunkCount) {
+    SlhvkSignatureVerifyRequest* signaturesMapped;
+    err = vkMapMemory(
+      ctx->primaryDevice,
+      signaturesInputMemory,
+      0,
+      signaturesBufferSize,
+      0,
+      (void**) &signaturesMapped
+    );
+    if (err) goto cleanup;
+
+    // Copy the signatures and their verification inputs to the device input memory
+    for (uint32_t i = 0; i < signaturesChunkCount; i++) {
+      uint32_t sigIndex = sigsChecked + i;
+      if (sigIndex >= signaturesLen) break;
+
+      slhvkDigestAndSplitMsg(
+        signatures[sigIndex], // randomizer is first N bytes of signature,
+        pkSeeds[sigIndex],
+        pkRoots[sigIndex],
+        contextString,
+        contextStringSize,
+        messages[sigIndex],
+        messageSizes[sigIndex],
+        forsIndices,
+        (uint64_t*) &signaturesMapped[i].treeAddress,
+        &signaturesMapped[i].signingKeypairAddress
+      );
+
+      memcpy(signaturesMapped[i].pkSeed, pkSeeds[i], SLHVK_N);
+      memcpy(signaturesMapped[i].signature, &signatures[i][SLHVK_N], SLHVK_SIGNATURE_SIZE - SLHVK_N);
+      memcpy(signaturesMapped[i].forsIndices, forsIndices, sizeof(forsIndices));
+    }
+    vkUnmapMemory(ctx->primaryDevice, signaturesInputMemory);
+
+
+    // Submit the command buffer to the queue to process this chunk of signatures.
+    VkSubmitInfo submitInfo = {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &verifyCommandBuffer,
+    };
+    err = vkQueueSubmit(primaryQueue, 1, &submitInfo, fence);
+    if (err) goto cleanup;
+    err = vkWaitForFences(ctx->primaryDevice, 1, &fence, VK_TRUE, 100e9);
+    if (err) goto cleanup;
+    err = vkResetFences(ctx->primaryDevice, 1, &fence);
+    if (err) goto cleanup;
+
+    // Read the verification output results
+    uint32_t* verifyResultsMapped;
+    err = vkMapMemory(
+      ctx->primaryDevice,
+      verifyResultsOutputMemory,
+      0,
+      verifyResultsBufferSize,
+      0,
+      (void**) &verifyResultsMapped
+    );
+    if (err) goto cleanup;
+    size_t resultsLen = min(signaturesChunkCount, signaturesLen - sigsChecked);
+    memcpy(
+      &verifyResultsOut[sigsChecked],
+      verifyResultsMapped,
+      resultsLen * sizeof(uint32_t)
+    );
+    vkUnmapMemory(ctx->primaryDevice, verifyResultsOutputMemory);
+  }
+
+cleanup:
+  vkDestroyFence(ctx->primaryDevice, fence, NULL);
+  vkDestroyBuffer(ctx->primaryDevice, signaturesBuffer, NULL);
+  vkDestroyBuffer(ctx->primaryDevice, signaturesStagingBuffer, NULL);
+  vkDestroyBuffer(ctx->primaryDevice, verifyResultsBuffer, NULL);
+  vkDestroyBuffer(ctx->primaryDevice, verifyResultsStagingBuffer, NULL);
+  vkFreeMemory(ctx->primaryDevice, signaturesBufferMemory, NULL);
+  vkFreeMemory(ctx->primaryDevice, signaturesStagingBufferMemory, NULL);
+  vkFreeMemory(ctx->primaryDevice, verifyResultsBufferMemory, NULL);
+  vkFreeMemory(ctx->primaryDevice, verifyResultsStagingBufferMemory, NULL);
+
   return err;
 }
