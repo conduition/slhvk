@@ -4,25 +4,25 @@ layout(local_size_x_id = 0) in;
 
 // Number of SHA256 state words to write to the output buffer.
 //   HASH_WORDS = N / 4
-layout(constant_id = 1) const uint HASH_WORDS = 4;
+#define HASH_WORDS 4
 
 // SLH-DSA parameters
-layout(constant_id = 2) const uint FORS_TREE_HEIGHT = 12;
-layout(constant_id = 3) const uint FORS_TREE_COUNT = 14;
-layout(constant_id = 4) const uint WOTS_LOG_W = 4;
-layout(constant_id = 5) const uint WOTS_CHAIN_COUNT1 = 32;
-layout(constant_id = 6) const uint WOTS_CHAIN_COUNT2 = 3;
-layout(constant_id = 7) const uint XMSS_HEIGHT = 9;
-layout(constant_id = 8) const uint HYPERTREE_LAYERS = 7;
+#define FORS_TREE_HEIGHT 12
+#define FORS_TREE_COUNT 14
+#define WOTS_LOG_W 4
+#define WOTS_CHAIN_COUNT1 32
+#define WOTS_CHAIN_COUNT2 3
+#define XMSS_HEIGHT 9
+#define HYPERTREE_LAYERS 7
 
-const uint FORS_LEAVES_COUNT = 1 << FORS_TREE_HEIGHT;
-const uint FORS_SIGNATURE_WORDS = HASH_WORDS * FORS_TREE_COUNT * (1 + FORS_TREE_HEIGHT);
-const uint HYPERTREE_SIGNATURE_START_OFFSET = HASH_WORDS + FORS_SIGNATURE_WORDS;
-const uint WOTS_CHAIN_COUNT = WOTS_CHAIN_COUNT1 + WOTS_CHAIN_COUNT2;
-const uint WOTS_CHAIN_LEN = 1 << WOTS_LOG_W;
-const uint XMSS_LEAVES = 1 << XMSS_HEIGHT;
-const uint XMSS_SIGNATURE_WORDS = HASH_WORDS * (WOTS_CHAIN_COUNT + XMSS_HEIGHT);
-const uint WOTS_CHAINS_PER_LAYER = XMSS_LEAVES * WOTS_CHAIN_COUNT;
+#define FORS_LEAVES_COUNT (1 << FORS_TREE_HEIGHT)
+#define FORS_SIGNATURE_WORDS (HASH_WORDS * FORS_TREE_COUNT * (1 + FORS_TREE_HEIGHT))
+#define HYPERTREE_SIGNATURE_START_OFFSET (HASH_WORDS + FORS_SIGNATURE_WORDS)
+#define WOTS_CHAIN_COUNT (WOTS_CHAIN_COUNT1 + WOTS_CHAIN_COUNT2)
+#define WOTS_CHAIN_LEN (1 << WOTS_LOG_W)
+#define XMSS_LEAVES (1 << XMSS_HEIGHT)
+#define XMSS_SIGNATURE_WORDS (HASH_WORDS * (WOTS_CHAIN_COUNT + XMSS_HEIGHT))
+#define WOTS_CHAINS_PER_LAYER (XMSS_LEAVES * WOTS_CHAIN_COUNT)
 
 const uint K[] = {
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
