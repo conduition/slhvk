@@ -60,34 +60,6 @@ void xmss_node_merge(
   }
 }
 
-// Populate the base-W message to be signed by higher-level XMSS trees.
-void set_xmss_root_message(uint root_node_offset, out uint message[WOTS_CHAIN_COUNT]) {
-  for (uint i = 0; i < HASH_WORDS; i++) {
-    if (WOTS_CHAIN_LEN == 256) {
-      uint offset = i * 4;
-      for (uint j = 0; j < 4; j++) {
-        message[offset + j] = (xmss_node_states[root_node_offset + i] >> (24 - j*8)) & 0xFF;
-      }
-    } else if (WOTS_CHAIN_LEN == 16) {
-      uint offset = i * 8;
-      for (uint j = 0; j < 8; j++) {
-        message[offset + j] = (xmss_node_states[root_node_offset + i] >> (28 - j*4)) & 0xF;
-      }
-    }
-  }
-
-  // message_words is now initialized up to WOTS_CHAIN_COUNT1.
-  // time to append the checksum.
-  uint checksum = 0;
-  for (uint i = 0; i < WOTS_CHAIN_COUNT1; i++) {
-    checksum += WOTS_CHAIN_LEN - 1 - message[i];
-  }
-  for (uint i = 0; i < WOTS_CHAIN_COUNT2; i++) {
-    message[WOTS_CHAIN_COUNT - 1 - i] = checksum & (WOTS_CHAIN_LEN - 1);
-    checksum >>= WOTS_LOG_W;
-  }
-}
-
 void main() {
   // uint thread_id = gl_GlobalInvocationID.x;
   uint local_id = gl_LocalInvocationID.x;
@@ -148,8 +120,13 @@ void main() {
   // Convert the XMSS root node to a base-W message, so it can be signed by the next XMSS
   // tree layer up (in the WOTS sign shader).
   if (local_id == 0 && layer_address < HYPERTREE_LAYERS - 1) {
+    uint root_node[HASH_WORDS];
+    for (uint i = 0; i < HASH_WORDS; i++) {
+      root_node[i] = xmss_node_states[xmss_node_offset + i];
+    }
+
     uint message[WOTS_CHAIN_COUNT];
-    set_xmss_root_message(xmss_node_offset, message);
+    convert_to_base_w(root_node, message);
 
     uint xmss_root_messages_offset = (layer_address + 1) * WOTS_CHAIN_COUNT;
     for (uint i = 0; i < WOTS_CHAIN_COUNT; i++) {

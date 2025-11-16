@@ -344,3 +344,31 @@ void define_schedule_2hash(
   // msg_bit_len
   schedule[15] = 8 * (64 + 22 + 2 * HASH_WORDS * 4);
 }
+
+// Convert an N-byte hash to a base-W message to be signed by XMSS.
+void convert_to_base_w(const in uint hash[HASH_WORDS], out uint message[WOTS_CHAIN_COUNT]) {
+  for (uint i = 0; i < HASH_WORDS; i++) {
+    #if WOTS_CHAIN_LEN == 256
+      uint offset = i * 4;
+      for (uint j = 0; j < 4; j++) {
+        message[offset + j] = (hash[i] >> (24 - j*8)) & 0xFF;
+      }
+    #elif WOTS_CHAIN_LEN == 16
+      uint offset = i * 8;
+      for (uint j = 0; j < 8; j++) {
+        message[offset + j] = (hash[i] >> (28 - j*4)) & 0xF;
+      }
+    #endif
+  }
+
+  // message is now initialized up to WOTS_CHAIN_COUNT1.
+  // time to append the checksum.
+  uint checksum = 0;
+  for (uint i = 0; i < WOTS_CHAIN_COUNT1; i++) {
+    checksum += WOTS_CHAIN_LEN - 1 - message[i];
+  }
+  for (uint i = 0; i < WOTS_CHAIN_COUNT2; i++) {
+    message[WOTS_CHAIN_COUNT - 1 - i] = checksum & (WOTS_CHAIN_LEN - 1);
+    checksum >>= WOTS_LOG_W;
+  }
+}
