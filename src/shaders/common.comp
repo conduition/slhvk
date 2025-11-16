@@ -302,3 +302,45 @@ void define_schedule_1hash(
   // )
   schedule[15] = 8 * (64 + 22 + 4 * HASH_WORDS);
 }
+
+void define_schedule_2hash(
+  uint layer_address,
+  uint adrs_type,
+  uint keypair_address,
+  uint node_height,
+  uint node_index,
+  uint64 tree_address,
+  const in uint left_child[HASH_WORDS],
+  const in uint right_child[HASH_WORDS],
+  out uint schedule[64]
+) {
+  schedule[0] = (layer_address << 24) | (tree_address.hi >> 8);
+  schedule[1] = (tree_address.hi << 24) | (tree_address.lo >> 8);
+  schedule[2] = (tree_address.lo << 24) | (adrs_type << 16) | (keypair_address >> 16);
+  schedule[3] = (keypair_address << 16) | (node_height >> 16);
+  schedule[4] = (node_height << 16) | (node_index >> 16);
+  schedule[5] = (node_index << 16)  | (left_child[0] >> 16);
+
+  for (uint i = 0; i < HASH_WORDS - 1; i++) {
+    schedule[6 + i] = (left_child[i] << 16) |
+                      (left_child[i + 1] >> 16);
+  }
+  schedule[6 + HASH_WORDS - 1] = (left_child[HASH_WORDS - 1] << 16) | (right_child[0] >> 16);
+
+  // For 192-bit and 256-bit parameter sets, we must invoke the compression function twice.
+  if (HASH_WORDS > 4) {
+    // TODO: sha512
+  }
+  for (uint i = 0; i < HASH_WORDS - 1; i++) {
+    schedule[6 + HASH_WORDS + i] = (right_child[i] << 16) | (right_child[i + 1] >> 16);
+  }
+  schedule[6 + 2 * HASH_WORDS - 1] = (right_child[HASH_WORDS - 1] << 16) | 0x8000;
+
+  // Padding
+  for (uint i = 6 + 2 * HASH_WORDS; i < 15; i++) {
+    schedule[i] = 0;
+  }
+
+  // msg_bit_len
+  schedule[15] = 8 * (64 + 22 + 2 * HASH_WORDS * 4);
+}

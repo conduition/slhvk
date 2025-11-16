@@ -30,37 +30,23 @@ void xmss_node_merge(
   uint node_index
 ) {
   uint schedule[64];
-  schedule[0] = (layer_address << 24)   | (tree_address.hi >> 8);
-  schedule[1] = (tree_address.hi << 24) | (tree_address.lo >> 8);
-  schedule[2] = (tree_address.lo << 24) | (ADRS_TYPE_TREE << 16);
-  schedule[3] = node_height >> 16;
-  schedule[4] = (node_height << 16) | (node_index >> 16);
-  schedule[5] = (node_index << 16)  | (xmss_node_states[lnode_pos] >> 16);
-
-  for (uint i = 0; i < HASH_WORDS - 1; i++) {
-    schedule[6 + i] = (xmss_node_states[lnode_pos + i] << 16) |
-                      (xmss_node_states[lnode_pos + i + 1] >> 16);
+  uint lchild[HASH_WORDS];
+  uint rchild[HASH_WORDS];
+  for (uint i = 0; i < HASH_WORDS; i++) {
+    lchild[i] = xmss_node_states[lnode_pos + i];
+    rchild[i] = xmss_node_states[rnode_pos + i];
   }
-  schedule[6 + HASH_WORDS - 1] = (xmss_node_states[lnode_pos + HASH_WORDS - 1] << 16) |
-                                 (xmss_node_states[rnode_pos] >> 16);
-
-  // For 192-bit and 256-bit parameter sets, we must invoke the compression function twice.
-  if (HASH_WORDS > 4) {
-    // TODO: sha512
-  }
-  for (uint i = 0; i < HASH_WORDS - 1; i++) {
-    schedule[6 + HASH_WORDS + i] = (xmss_node_states[rnode_pos + i] << 16) |
-                                   (xmss_node_states[rnode_pos + i + 1] >> 16);
-  }
-  schedule[6 + 2 * HASH_WORDS - 1] = (xmss_node_states[rnode_pos + HASH_WORDS - 1] << 16) | 0x8000;
-
-  // Padding
-  for (uint i = 6 + 2 * HASH_WORDS; i < 15; i++) {
-    schedule[i] = 0;
-  }
-
-  // msg_bit_len
-  schedule[15] = 8 * (64 + 22 + 2 * HASH_WORDS * 4);
+  define_schedule_2hash(
+    layer_address,
+    ADRS_TYPE_TREE,
+    0, /* keypair_address */
+    node_height,
+    node_index,
+    tree_address,
+    lchild,
+    rchild,
+    schedule
+  );
 
   uint s[8] = {
     sha256_state[0], sha256_state[1], sha256_state[2], sha256_state[3], // a b c d
