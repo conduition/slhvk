@@ -2,9 +2,6 @@
 #extension GL_GOOGLE_include_directive : enable
 #include "keygen_common.comp"
 
-const uint WOTS_TIPS_WORDS = WOTS_CHAIN_COUNT * HASH_WORDS;
-const uint LAST_BLOCK_WORDS = (WOTS_TIPS_WORDS - 10) % 16;
-
 // The WOTS hash chain states. For all WOTS keypairs these will be filled with
 // hash chains iterated to their tips.
 layout(binding = 2) buffer chainstates {
@@ -21,56 +18,12 @@ void main() {
   uint layer_address = HYPERTREE_LAYERS - 1;
   uint keypair_address = thread_id % XMSS_LEAVES;
 
-  // Identify where this thread's WOTS hash chain tips begin in the chainstates buffer.
-  uint tips[WOTS_TIPS_WORDS] = hash_chain_states[thread_id];
-
-  uint s[8] = sha256_states[key_index];
-
-  uint schedule[64];
-  schedule[0] = (layer_address << 24);
-  schedule[1] = 0;
-  schedule[2] = (ADRS_TYPE_WOTS_PK << 16) | (keypair_address >> 16);
-  schedule[3] = (keypair_address << 16);
-  schedule[4] = 0; // chain_address and hash_address are left empty.
-  schedule[5] = tips[0] >> 16;
-
-  // Compute the first block.
-  for (uint i = 0; i < 10; i++) {
-    schedule[6 + i] = (tips[i] << 16) |
-                      (tips[i + 1] >> 16);
-  }
-  sha256_rounds_all(s, schedule);
-
-
-  // Compute the intermediate blocks.
-  for (uint q = 0; q < (WOTS_TIPS_WORDS - 10) / 16; q++) {
-    uint q16 = q * 16;
-    for (uint i = 0; i < 16; i++) {
-      schedule[i] =
-        (tips[10 + q16 + i] << 16) |
-        (tips[11 + q16 + i] >> 16);
-    }
-    sha256_rounds_all(s, schedule);
-  }
-
-
-  // Fill out the last block
-  for (uint i = 0; i < LAST_BLOCK_WORDS - 1; i++) {
-    schedule[i] =
-      (tips[WOTS_TIPS_WORDS - LAST_BLOCK_WORDS + i] << 16) |
-      (tips[WOTS_TIPS_WORDS - LAST_BLOCK_WORDS + i + 1] >> 16);
-  }
-  schedule[LAST_BLOCK_WORDS - 1] = (tips[WOTS_TIPS_WORDS - 1] << 16) | 0x8000;
-  for (uint i = LAST_BLOCK_WORDS; i < 15; i++) {
-    schedule[i] = 0;
-  }
-  schedule[15] = 8 * (64 + 22 + WOTS_CHAIN_COUNT * HASH_WORDS * 4); // msg_bit_len
-
-  // Compute the last block.
-  sha256_rounds_all(s, schedule);
-
-  // Store the output in the correct region of the pubkeys output buffer
-  for (uint i = 0; i < HASH_WORDS; i++) {
-    xmss_node_states[key_index][keypair_address][i] = s[i];
-  }
+  compute_xmss_leaf(
+    layer_address,
+    uint64(0, 0), /* tree_address */
+    keypair_address,
+    sha256_states[key_index],
+    hash_chain_states[thread_id],
+    xmss_node_states[key_index][keypair_address]
+  );
 }
