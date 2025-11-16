@@ -5,22 +5,22 @@
 // The working buffer for XMSS node computations.
 // Prefilled with WOTS public keys.
 layout(binding = 1) buffer xmssnodes {
-  uint xmss_node_states[];
+  uint xmss_node_states[HYPERTREE_LAYERS][XMSS_LEAVES][HASH_WORDS];
 };
 
 // The hypertree signature (a chain of XMSS signatures)
 layout(binding = 2) buffer htsig {
-  uint hypertree_signature[];
+  XmssSignature hypertree_signature[HYPERTREE_LAYERS];
 };
 
 // XMSS root hashes, converted into checksummed base-W messages (for WOTS signing).
 layout(binding = 3) buffer rootmsg {
-  uint xmss_root_messages[];
+  uint xmss_root_messages[HYPERTREE_LAYERS][WOTS_CHAIN_COUNT];
 };
 
 // Merges two XMSS child node hashes at positions `lnode_pos` and `rnode_pos`
 // into a parent node hash at height `node_height` and index `node_index`.
-// The output is written to `xmss_node_states[lnode_pos]`.
+// The output is written to `xmss_node_states[layer_address][lnode_pos]`.
 void xmss_node_merge(
   uint64 tree_address,
   uint layer_address,
@@ -30,12 +30,6 @@ void xmss_node_merge(
   uint node_index
 ) {
   uint schedule[64];
-  uint lchild[HASH_WORDS];
-  uint rchild[HASH_WORDS];
-  for (uint i = 0; i < HASH_WORDS; i++) {
-    lchild[i] = xmss_node_states[lnode_pos + i];
-    rchild[i] = xmss_node_states[rnode_pos + i];
-  }
   define_schedule_2hash(
     layer_address,
     ADRS_TYPE_TREE,
@@ -43,8 +37,8 @@ void xmss_node_merge(
     node_height,
     node_index,
     tree_address,
-    lchild,
-    rchild,
+    xmss_node_states[layer_address][lnode_pos],
+    xmss_node_states[layer_address][rnode_pos],
     schedule
   );
 
@@ -56,7 +50,7 @@ void xmss_node_merge(
 
   // Write the compressed output to the left node position.
   for (uint i = 0; i < HASH_WORDS; i++) {
-    xmss_node_states[lnode_pos + i] = s[i];
+    xmss_node_states[layer_address][lnode_pos][i] = s[i];
   }
 }
 
@@ -72,17 +66,12 @@ void main() {
     ? signing_keypair_address
     : (shifted_tree_address(tree_address, XMSS_HEIGHT, layer_address - 1).lo & (XMSS_LEAVES - 1));
 
-  uint xmss_sig_offset = layer_address * XMSS_SIGNATURE_WORDS + // seek to this XMSS signature
-                         WOTS_CHAIN_COUNT * HASH_WORDS;
-
-  uint xmss_node_offset = layer_address * XMSS_LEAVES * HASH_WORDS;
-
   // First find and write the height=0 merkle hash: the WOTS pubkey
   // at XMSS leaf index (signing_keypair_address ^ 1)
   if (local_id == 0) {
-    uint first_hash_offset = xmss_node_offset + (our_layer_signing_keypair_address ^ 1) * HASH_WORDS;
+    uint first_hash_offset = our_layer_signing_keypair_address ^ 1;
     for (uint i = 0; i < HASH_WORDS; i++) {
-      hypertree_signature[xmss_sig_offset + i] = flip_endianness(xmss_node_states[first_hash_offset + i]);
+      hypertree_signature[layer_address].xmss_merkle_path[0][i] = flip_endianness(xmss_node_states[layer_address][first_hash_offset][i]);
     }
   }
 
@@ -90,24 +79,23 @@ void main() {
   for (uint node_height = 1; node_height <= XMSS_HEIGHT; node_height++) {
     const uint next_level_nodes_len = 1 << (XMSS_HEIGHT - node_height);
 
-    uint prev_layer_node_offset = (1 << (node_height - 1)) * HASH_WORDS;
+    uint prev_layer_node_offset = (1 << (node_height - 1));
 
     // Each thread may need to compute multiple nodes on this layer of the tree
     for (uint node_index = local_id; node_index < next_level_nodes_len; node_index += gl_WorkGroupSize.x) {
       uint left_child_index = node_index * 2;
       uint right_child_index = node_index * 2 + 1;
 
-      uint lchild_offset = xmss_node_offset + left_child_index * prev_layer_node_offset;
-      uint rchild_offset = xmss_node_offset + right_child_index * prev_layer_node_offset;
+      uint lchild_offset = left_child_index * prev_layer_node_offset;
+      uint rchild_offset = right_child_index * prev_layer_node_offset;
 
       xmss_node_merge(tree_address_shifted, layer_address, lchild_offset, rchild_offset, node_height, node_index);
 
       // A smidgeon of bit manipulation which determines if this node is one of the
       // nodes we need to write to the output XMSS signature buffer.
       if (node_index == ((our_layer_signing_keypair_address >> node_height) ^ 1)) {
-        uint merkle_offset = xmss_sig_offset + node_height * HASH_WORDS;
         for (uint i = 0; i < HASH_WORDS; i++) {
-          hypertree_signature[merkle_offset + i] = flip_endianness(xmss_node_states[lchild_offset + i]);
+          hypertree_signature[layer_address].xmss_merkle_path[node_height][i] = flip_endianness(xmss_node_states[layer_address][lchild_offset][i]);
         }
       }
     }
@@ -120,17 +108,9 @@ void main() {
   // Convert the XMSS root node to a base-W message, so it can be signed by the next XMSS
   // tree layer up (in the WOTS sign shader).
   if (local_id == 0 && layer_address < HYPERTREE_LAYERS - 1) {
-    uint root_node[HASH_WORDS];
-    for (uint i = 0; i < HASH_WORDS; i++) {
-      root_node[i] = xmss_node_states[xmss_node_offset + i];
-    }
-
+    uint root_node[HASH_WORDS] = xmss_node_states[layer_address][0];
     uint message[WOTS_CHAIN_COUNT];
     convert_to_base_w(root_node, message);
-
-    uint xmss_root_messages_offset = (layer_address + 1) * WOTS_CHAIN_COUNT;
-    for (uint i = 0; i < WOTS_CHAIN_COUNT; i++) {
-      xmss_root_messages[xmss_root_messages_offset + i] = message[i];
-    }
+    xmss_root_messages[layer_address + 1] = message;
   }
 }

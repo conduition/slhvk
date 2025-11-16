@@ -10,12 +10,12 @@ TODO
 
 **************************/
 
-const uint THREAD_COUNT = HYPERTREE_LAYERS * XMSS_LEAVES * WOTS_CHAIN_COUNT;
+#define THREAD_COUNT (HYPERTREE_LAYERS * XMSS_LEAVES * WOTS_CHAIN_COUNT)
 
 // The WOTS hash chain states. For all WOTS keypairs these will be filled with
 // hash chains iterated to their tips.
 layout(binding = 1) buffer chainstates {
-  uint hash_chain_states[];
+  uint hash_chain_states[THREAD_COUNT][HASH_WORDS];
 };
 
 void main() {
@@ -67,8 +67,7 @@ void main() {
     sha256_rounds_5_thru_64(s, schedule, old_state);
   }
 
-  uint offset = thread_id * HASH_WORDS;
   for (uint i = 0; i < HASH_WORDS; i++) {
-    hash_chain_states[offset + i] = s[i];
+    hash_chain_states[thread_id][i] = s[i];
   }
 }

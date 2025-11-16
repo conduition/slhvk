@@ -2,19 +2,19 @@
 #extension GL_GOOGLE_include_directive : enable
 #include "signing_common.comp"
 
-const uint THREAD_COUNT = HYPERTREE_LAYERS * XMSS_LEAVES;
-const uint WOTS_TIPS_WORDS = WOTS_CHAIN_COUNT * HASH_WORDS;
-const uint LAST_BLOCK_WORDS = (WOTS_TIPS_WORDS - 10) % 16;
+#define THREAD_COUNT (HYPERTREE_LAYERS * XMSS_LEAVES)
+#define WOTS_TIPS_WORDS (WOTS_CHAIN_COUNT * HASH_WORDS)
+#define LAST_BLOCK_WORDS ((WOTS_TIPS_WORDS - 10) % 16)
 
 // The WOTS hash chain states. For all WOTS keypairs these will be filled with
 // hash chains iterated to their tips.
 layout(binding = 1) buffer chainstates {
-  uint hash_chain_states[];
+  uint hash_chain_states[THREAD_COUNT][WOTS_TIPS_WORDS];
 };
 
 // The compressed WOTS public keys hash output states.
 layout(binding = 2) buffer xmssnodes {
-  uint xmss_node_states[];
+  uint xmss_node_states[THREAD_COUNT][HASH_WORDS];
 };
 
 void main() {
@@ -26,7 +26,7 @@ void main() {
   uint64 tree_address_shifted = shifted_tree_address(tree_address, XMSS_HEIGHT, layer_address);
 
   // Identify where this thread's WOTS hash chain tips begin in the chainstates buffer.
-  uint tip_offset = thread_id * (WOTS_CHAIN_COUNT * HASH_WORDS);
+  uint tips[WOTS_TIPS_WORDS] = hash_chain_states[thread_id];
 
   uint s[8] = {
     sha256_state[0], sha256_state[1], sha256_state[2], sha256_state[3], // a b c d
@@ -39,12 +39,12 @@ void main() {
   schedule[2] = (tree_address_shifted.lo << 24) | (ADRS_TYPE_WOTS_PK << 16) | (keypair_address >> 16);
   schedule[3] = (keypair_address << 16);
   schedule[4] = 0; // chain_address and hash_address are left empty.
-  schedule[5] = hash_chain_states[tip_offset] >> 16;
+  schedule[5] = tips[0] >> 16;
 
   // Compute the first block.
   for (uint i = 0; i < 10; i++) {
-    schedule[6 + i] = (hash_chain_states[tip_offset + i] << 16) |
-                      (hash_chain_states[tip_offset + i + 1] >> 16);
+    schedule[6 + i] = (tips[i] << 16) |
+                      (tips[i + 1] >> 16);
   }
   sha256_rounds_all(s, schedule);
 
@@ -54,8 +54,8 @@ void main() {
     uint q16 = q * 16;
     for (uint i = 0; i < 16; i++) {
       schedule[i] =
-        (hash_chain_states[tip_offset + 10 + q16 + i] << 16) |
-        (hash_chain_states[tip_offset + 11 + q16 + i] >> 16);
+        (tips[10 + q16 + i] << 16) |
+        (tips[11 + q16 + i] >> 16);
     }
     sha256_rounds_all(s, schedule);
   }
@@ -64,10 +64,10 @@ void main() {
   // Fill out the last block
   for (uint i = 0; i < LAST_BLOCK_WORDS - 1; i++) {
     schedule[i] =
-      (hash_chain_states[tip_offset + WOTS_TIPS_WORDS - LAST_BLOCK_WORDS + i] << 16) |
-      (hash_chain_states[tip_offset + WOTS_TIPS_WORDS - LAST_BLOCK_WORDS + i + 1] >> 16);
+      (tips[WOTS_TIPS_WORDS - LAST_BLOCK_WORDS + i] << 16) |
+      (tips[WOTS_TIPS_WORDS - LAST_BLOCK_WORDS + i + 1] >> 16);
   }
-  schedule[LAST_BLOCK_WORDS - 1] = (hash_chain_states[tip_offset + WOTS_TIPS_WORDS - 1] << 16) | 0x8000;
+  schedule[LAST_BLOCK_WORDS - 1] = (tips[WOTS_TIPS_WORDS - 1] << 16) | 0x8000;
   for (uint i = LAST_BLOCK_WORDS; i < 15; i++) {
     schedule[i] = 0;
   }
@@ -76,9 +76,8 @@ void main() {
   // Compute the last block.
   sha256_rounds_all(s, schedule);
 
-  // Store the output in the correct region of the pubkeys output buffer
-  uint offset = thread_id * HASH_WORDS;
+  // Store the output in the correct region of the XMSS nodes output buffer
   for (uint i = 0; i < HASH_WORDS; i++) {
-    xmss_node_states[offset + i] = s[i];
+    xmss_node_states[thread_id][i] = s[i];
   }
 }

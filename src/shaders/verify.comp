@@ -2,16 +2,6 @@
 #extension GL_GOOGLE_include_directive : enable
 #include "common.comp"
 
-struct ForsMerkleProof {
-  uint preimage[HASH_WORDS];
-  uint merkle_path[FORS_TREE_HEIGHT * HASH_WORDS];
-};
-
-struct XmssSignature {
-  uint wots_hashes[WOTS_CHAIN_COUNT * HASH_WORDS];
-  uint xmss_merkle_path[XMSS_HEIGHT * HASH_WORDS];
-};
-
 struct SlhDsaSignatureVerifyRequest {
   uint pk_seed[HASH_WORDS];
   uint signing_keypair_address;

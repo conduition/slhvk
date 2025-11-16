@@ -20,25 +20,25 @@ void xmss_node_merge(
   schedule[2] = (ADRS_TYPE_TREE << 16);
   schedule[3] = node_height >> 16;
   schedule[4] = (node_height << 16) | (node_index >> 16);
-  schedule[5] = (node_index << 16)  | (xmss_node_states[lnode_pos] >> 16);
+  schedule[5] = (node_index << 16)  | (xmss_node_states[key_index][lnode_pos][0] >> 16);
 
   for (uint i = 0; i < HASH_WORDS - 1; i++) {
-    schedule[6 + i] = (xmss_node_states[lnode_pos + i] << 16) |
-                      (xmss_node_states[lnode_pos + i + 1] >> 16);
+    schedule[6 + i] = (xmss_node_states[key_index][lnode_pos][i] << 16) |
+                      (xmss_node_states[key_index][lnode_pos][i + 1] >> 16);
   }
-  schedule[6 + HASH_WORDS - 1] = (xmss_node_states[lnode_pos + HASH_WORDS - 1] << 16) |
-                                 (xmss_node_states[rnode_pos] >> 16);
+  schedule[6 + HASH_WORDS - 1] = (xmss_node_states[key_index][lnode_pos][HASH_WORDS - 1] << 16) |
+                                 (xmss_node_states[key_index][rnode_pos][0] >> 16);
 
   // For 192-bit and 256-bit parameter sets, we must invoke the compression function twice.
   if (HASH_WORDS > 4) {
     // TODO: sha512
   }
   for (uint i = 0; i < HASH_WORDS - 1; i++) {
-    schedule[6 + HASH_WORDS + i] = (xmss_node_states[rnode_pos + i] << 16) |
-                                   (xmss_node_states[rnode_pos + i + 1] >> 16);
+    schedule[6 + HASH_WORDS + i] = (xmss_node_states[key_index][rnode_pos][i] << 16) |
+                                   (xmss_node_states[key_index][rnode_pos][i + 1] >> 16);
   }
   schedule[6 + 2 * HASH_WORDS - 1] =
-    (xmss_node_states[rnode_pos + HASH_WORDS - 1] << 16) | 0x8000;
+    (xmss_node_states[key_index][rnode_pos][HASH_WORDS - 1] << 16) | 0x8000;
 
   // Padding
   for (uint i = 6 + 2 * HASH_WORDS; i < 15; i++) {
@@ -48,18 +48,12 @@ void xmss_node_merge(
   // msg_bit_len
   schedule[15] = 8 * (64 + 22 + 2 * HASH_WORDS * 4);
 
-  uint sha_offset = key_index * 8;
-  uint s[8] = {
-    sha256_states[sha_offset + 0], sha256_states[sha_offset + 1],
-    sha256_states[sha_offset + 2], sha256_states[sha_offset + 3],
-    sha256_states[sha_offset + 4], sha256_states[sha_offset + 5],
-    sha256_states[sha_offset + 6], sha256_states[sha_offset + 7]
-  };
+  uint s[8] = sha256_states[key_index];
   sha256_rounds_all(s, schedule);
 
   // Write the compressed output to the left node position.
   for (uint i = 0; i < HASH_WORDS; i++) {
-    xmss_node_states[lnode_pos + i] = s[i];
+    xmss_node_states[key_index][lnode_pos][i] = s[i];
   }
 }
 
@@ -72,21 +66,19 @@ void main() {
   // Always generate the root XMSS tree.
   uint layer_address = HYPERTREE_LAYERS - 1;
 
-  uint xmss_node_offset = key_index * XMSS_LEAVES * HASH_WORDS;
-
   // For each layer in the XMSS tree:
   for (uint node_height = 1; node_height <= XMSS_HEIGHT; node_height++) {
     const uint next_level_nodes_len = 1 << (XMSS_HEIGHT - node_height);
 
-    uint prev_layer_node_offset = (1 << (node_height - 1)) * HASH_WORDS;
+    uint prev_layer_node_offset = (1 << (node_height - 1));
 
     // Each thread may need to compute multiple nodes on this layer of the tree
     for (uint node_index = local_id; node_index < next_level_nodes_len; node_index += gl_WorkGroupSize.x) {
       uint left_child_index = node_index * 2;
       uint right_child_index = node_index * 2 + 1;
 
-      uint lchild_offset = xmss_node_offset + left_child_index * prev_layer_node_offset;
-      uint rchild_offset = xmss_node_offset + right_child_index * prev_layer_node_offset;
+      uint lchild_offset = left_child_index * prev_layer_node_offset;
+      uint rchild_offset = right_child_index * prev_layer_node_offset;
 
       xmss_node_merge(key_index, lchild_offset, rchild_offset, node_height, node_index);
     }
@@ -99,9 +91,8 @@ void main() {
   // Convert the XMSS root node to big-endian encoding and write it over
   // the original skSeed input for extra safety and efficiency.
   if (local_id == 0) {
-    uint offset = key_index * HASH_WORDS;
     for (uint i = 0; i < HASH_WORDS; i++) {
-      sk_seeds[offset + i] = flip_endianness(xmss_node_states[xmss_node_offset + i]);
+      sk_seeds[key_index][i] = flip_endianness(xmss_node_states[key_index][0][i]);
     }
   }
 }

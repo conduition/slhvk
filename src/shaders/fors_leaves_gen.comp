@@ -2,22 +2,23 @@
 #extension GL_GOOGLE_include_directive : enable
 #include "signing_common.comp"
 
+#define THREAD_COUNT (FORS_TREE_COUNT * FORS_LEAVES_COUNT)
+
 // A set of A-bit indices into the K FORS trees
 layout(binding = 1) buffer forsmsg {
-  uint fors_message[];
+  uint fors_message[FORS_TREE_COUNT];
 };
 
 // This buffer will be filled with FORS leaf nodes
 layout(binding = 2) buffer forsnode {
-  uint fors_node_states[];
+  uint fors_node_states[THREAD_COUNT][HASH_WORDS];
 };
 
 // The FORS signature.
 layout(binding = 3) buffer forssig {
-  uint fors_signature[];
+  ForsMerkleProof fors_signature[FORS_TREE_COUNT];
 };
 
-const uint THREAD_COUNT = FORS_TREE_COUNT * FORS_LEAVES_COUNT;
 
 void main() {
   uint thread_id = gl_GlobalInvocationID.x;
@@ -50,9 +51,8 @@ void main() {
 
   // Write this preimage to the signature output if needed to sign the message.
   if (node_index_inside_tree == fors_message[fors_tree]) {
-    uint sig_offset = fors_tree * (FORS_TREE_HEIGHT + 1) * HASH_WORDS;
     for (uint i = 0; i < HASH_WORDS; i++) {
-      fors_signature[sig_offset + i] = flip_endianness(s[i]);
+      fors_signature[fors_tree].preimage[i] = flip_endianness(s[i]);
     }
   }
 
@@ -65,8 +65,7 @@ void main() {
   s = old_state;
   sha256_rounds_all(s, schedule);
 
-  uint fors_node_offset = thread_id * HASH_WORDS;
   for (uint i = 0; i < HASH_WORDS; i++) {
-    fors_node_states[fors_node_offset + i] = s[i];
+    fors_node_states[thread_id][i] = s[i];
   }
 }

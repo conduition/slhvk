@@ -7,21 +7,15 @@ layout(push_constant) uniform pc {
 
 // The secret key seeds for each of the key pairs.
 layout(binding = 0) buffer skseed {
-  uint sk_seeds[];
+  uint sk_seeds[][HASH_WORDS];
 };
 
 // The SHA256 states for each SLH-DSA key after absorbing the corresponding `pk_seed` and padding.
 layout(binding = 1) buffer shastate {
-  uint sha256_states[];
-};
-
-// The WOTS hash chain states. For all WOTS keypairs these will be filled with
-// hash chains iterated to their tips.
-layout(binding = 2) buffer chainstates {
-  uint hash_chain_states[];
+  uint sha256_states[][8];
 };
 
 // The compressed WOTS public keys hash output states.
 layout(binding = 3) buffer xmssnodes {
-  uint xmss_node_states[];
+  uint xmss_node_states[][XMSS_LEAVES][HASH_WORDS];
 };

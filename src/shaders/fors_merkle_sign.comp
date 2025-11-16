@@ -4,36 +4,30 @@
 
 // A set of A-bit indices into the K FORS trees
 layout(binding = 1) buffer forsmsg {
-  uint fors_message[];
+  uint fors_message[FORS_TREE_COUNT];
 };
 
 // This buffer will be filled with FORS leaf nodes
 layout(binding = 2) buffer forsnode {
-  uint fors_node_states[];
+  uint fors_node_states[FORS_TREE_COUNT][FORS_LEAVES_COUNT][HASH_WORDS];
 };
 
 // The FORS signature.
 layout(binding = 3) buffer forssig {
-  uint fors_signature[];
+  ForsMerkleProof fors_signature[FORS_TREE_COUNT];
 };
-
 
 // Merges two FORS child node hashes at positions `lnode_pos` and `rnode_pos`
 // into a parent node hash at height `node_height` and index `node_index`.
-// The output is written to `fors_node_states[lnode_pos]`.
+// The output is written to `fors_node_states[fors_tree][lnode_pos]`.
 void fors_node_merge(
+  uint fors_tree,
   uint lnode_pos,
   uint rnode_pos,
   uint node_height,
   uint node_index
 ) {
   uint schedule[64];
-  uint lchild[HASH_WORDS];
-  uint rchild[HASH_WORDS];
-  for (uint i = 0; i < HASH_WORDS; i++) {
-    lchild[i] = fors_node_states[lnode_pos + i];
-    rchild[i] = fors_node_states[rnode_pos + i];
-  }
   define_schedule_2hash(
     0, /* layer_address */
     ADRS_TYPE_FORS_TREE,
@@ -41,8 +35,8 @@ void fors_node_merge(
     node_height,
     node_index,
     tree_address,
-    lchild,
-    rchild,
+    fors_node_states[fors_tree][lnode_pos],
+    fors_node_states[fors_tree][rnode_pos],
     schedule
   );
 
@@ -54,7 +48,7 @@ void fors_node_merge(
 
   // Write the compressed output to the left node position.
   for (uint i = 0; i < HASH_WORDS; i++) {
-    fors_node_states[lnode_pos + i] = s[i];
+    fors_node_states[fors_tree][lnode_pos][i] = s[i];
   }
 }
 
@@ -62,22 +56,19 @@ void main() {
   uint local_id = gl_LocalInvocationID.x;
   uint fors_tree = gl_WorkGroupID.x;
 
-  uint fors_node_offset = fors_tree * FORS_LEAVES_COUNT * HASH_WORDS;
-  uint fors_sig_offset = HASH_WORDS + fors_tree * (FORS_TREE_HEIGHT + 1) * HASH_WORDS;
-
   // First find and write the height=0 merkle hash: the FORS node
   // at leaf index (fors_message[tree] ^ 1)
   if (local_id == 0) {
-    uint first_hash_offset = fors_node_offset + (fors_message[fors_tree] ^ 1) * HASH_WORDS;
+    uint first_hash_offset = fors_message[fors_tree] ^ 1;
     for (uint i = 0; i < HASH_WORDS; i++) {
-      fors_signature[fors_sig_offset + i] = flip_endianness(fors_node_states[first_hash_offset + i]);
+      fors_signature[fors_tree].merkle_path[0][i] = flip_endianness(fors_node_states[fors_tree][first_hash_offset][i]);
     }
   }
 
   // For each layer in the FORS tree:
   for (uint node_height = 1; node_height <= FORS_TREE_HEIGHT; node_height++) {
     uint next_level_nodes_len = 1 << (FORS_TREE_HEIGHT - node_height);
-    uint prev_layer_node_offset = (1 << (node_height - 1)) * HASH_WORDS;
+    uint prev_layer_node_offset = (1 << (node_height - 1));
     uint global_node_index_offset = fors_tree * next_level_nodes_len;
 
     // Each thread may need to compute multiple nodes on this layer of the tree
@@ -85,10 +76,11 @@ void main() {
       uint left_child_index = local_node_index * 2;
       uint right_child_index = local_node_index * 2 + 1;
 
-      uint lchild_offset = fors_node_offset + left_child_index * prev_layer_node_offset;
-      uint rchild_offset = fors_node_offset + right_child_index * prev_layer_node_offset;
+      uint lchild_offset = left_child_index * prev_layer_node_offset;
+      uint rchild_offset = right_child_index * prev_layer_node_offset;
 
       fors_node_merge(
+        fors_tree,
         lchild_offset,
         rchild_offset,
         node_height,
@@ -98,9 +90,8 @@ void main() {
       // A smidgeon of bit manipulation which determines if this node is one of the
       // nodes we need to write to the output FORS signature buffer.
       if (local_node_index == ((fors_message[fors_tree] >> node_height) ^ 1)) {
-        uint merkle_offset = fors_sig_offset + node_height * HASH_WORDS;
         for (uint i = 0; i < HASH_WORDS; i++) {
-          fors_signature[merkle_offset + i] = flip_endianness(fors_node_states[lchild_offset + i]);
+          fors_signature[fors_tree].merkle_path[node_height][i] = flip_endianness(fors_node_states[fors_tree][lchild_offset][i]);
         }
       }
     }
@@ -113,7 +104,8 @@ void main() {
   // The FORS roots will be sent back to the host. Flip the bytes back to big-endian representation.
   if (local_id == 0) {
     for (uint i = 0; i < HASH_WORDS; i++) {
-      fors_node_states[fors_node_offset + i] = flip_endianness(fors_node_states[fors_node_offset + i]);
+      fors_node_states[fors_tree][0][i] =
+        flip_endianness(fors_node_states[fors_tree][0][i]);
     }
   }
 }

@@ -4,12 +4,12 @@
 
 // The hypertree signature (a chain of XMSS signatures)
 layout(binding = 1) buffer htsig {
-  uint hypertree_signature[];
+  XmssSignature hypertree_signature[HYPERTREE_LAYERS];
 };
 
 // XMSS root hashes, converted into checksummed base-W messages (for WOTS signing).
 layout(binding = 2) buffer rootmsg {
-  uint xmss_root_messages[];
+  uint xmss_root_messages[HYPERTREE_LAYERS][WOTS_CHAIN_COUNT];
 };
 
 const uint THREAD_COUNT = HYPERTREE_LAYERS * WOTS_CHAIN_COUNT;
@@ -30,7 +30,7 @@ void main() {
   // These message words were set either:
   // - For layer 0: by the host, from the output of the secondary device FORS shaders.
   // - For layers >= 1: by the XMSS merkle sign shader.
-  uint message_word = xmss_root_messages[layer_address * WOTS_CHAIN_COUNT + chain_address];
+  uint message_word = xmss_root_messages[layer_address][chain_address];
 
   uint schedule[64];
   define_schedule_1hash(
@@ -72,8 +72,7 @@ void main() {
   }
 
   // TODO: fill real wots sign output
-  uint xmss_sig_offset = layer_address * XMSS_SIGNATURE_WORDS + chain_address * HASH_WORDS;
   for (uint i = 0; i < HASH_WORDS; i++) {
-    hypertree_signature[xmss_sig_offset + i] = flip_endianness(s[i]);
+    hypertree_signature[layer_address].wots_hashes[chain_address][i] = flip_endianness(s[i]);
   }
 }

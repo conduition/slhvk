@@ -2,6 +2,12 @@
 #extension GL_GOOGLE_include_directive : enable
 #include "keygen_common.comp"
 
+// The WOTS hash chain states. For all WOTS keypairs these will be filled with
+// hash chains iterated to their tips.
+layout(binding = 2) buffer chainstates {
+  uint hash_chain_states[][HASH_WORDS];
+};
+
 uint THREAD_COUNT = keys_count * XMSS_LEAVES * WOTS_CHAIN_COUNT;
 
 void main() {
@@ -13,19 +19,17 @@ void main() {
   uint keypair_address = (thread_id % WOTS_CHAINS_PER_LAYER) / WOTS_CHAIN_COUNT;
   uint chain_address = thread_id % WOTS_CHAIN_COUNT;
 
-  uint sk_seed_offset = key_index * HASH_WORDS;
-
   uint schedule[64];
   schedule[0] = (layer_address << 24);
   schedule[1] = 0;
   schedule[2] = (ADRS_TYPE_WOTS_PRF << 16) | (keypair_address >> 16);
   schedule[3] = (keypair_address << 16) | (chain_address >> 16);
   schedule[4] = (chain_address << 16);
-  schedule[5] = (sk_seeds[sk_seed_offset] >> 16);
+  schedule[5] = (sk_seeds[key_index][0] >> 16);
   for (uint i = 1; i < HASH_WORDS; i++) {
-    schedule[5 + i] = (sk_seeds[sk_seed_offset + i - 1] << 16) | (sk_seeds[sk_seed_offset + i] >> 16);
+    schedule[5 + i] = (sk_seeds[key_index][i - 1] << 16) | (sk_seeds[key_index][i] >> 16);
   }
-  schedule[5 + HASH_WORDS] = (sk_seeds[sk_seed_offset + HASH_WORDS - 1] << 16) | 0x8000;
+  schedule[5 + HASH_WORDS] = (sk_seeds[key_index][HASH_WORDS - 1] << 16) | 0x8000;
 
   // Padding
   for (uint i = 5 + HASH_WORDS + 1; i < 15; i++) {
@@ -40,13 +44,7 @@ void main() {
   // )
   schedule[15] = 8 * (64 + 22 + 4 * HASH_WORDS);
 
-  uint sha_offset = key_index * 8;
-  uint s[8] = {
-    sha256_states[sha_offset + 0], sha256_states[sha_offset + 1],
-    sha256_states[sha_offset + 2], sha256_states[sha_offset + 3],
-    sha256_states[sha_offset + 4], sha256_states[sha_offset + 5],
-    sha256_states[sha_offset + 6], sha256_states[sha_offset + 7]
-  };
+  uint s[8] = sha256_states[key_index];
   uint old_state[8] = s;
 
   // Invoke the PRF to generate the initial preimage of the WOTS hash chain.
@@ -70,8 +68,7 @@ void main() {
     sha256_rounds_5_thru_64(s, schedule, old_state);
   }
 
-  uint offset = thread_id * HASH_WORDS;
   for (uint i = 0; i < HASH_WORDS; i++) {
-    hash_chain_states[offset + i] = s[i];
+    hash_chain_states[thread_id][i] = s[i];
   }
 }
