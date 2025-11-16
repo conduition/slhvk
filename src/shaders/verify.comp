@@ -23,9 +23,186 @@ layout(binding = 1) buffer res {
   uint verify_results[];
 };
 
+void flip_hash_endianness(
+  const in uint hash[HASH_WORDS],
+  out uint flipped[HASH_WORDS]
+) {
+  for (uint i = 0; i < HASH_WORDS; i++) {
+    flipped[i] = flip_endianness(hash[i]);
+  }
+}
+
+void compute_fors_root(
+  uint thread_id,
+  const in uint pk_seed_midstate[8],
+  uint fors_tree_index,
+  out uint fors_root[HASH_WORDS]
+) {
+  uint fors_node[HASH_WORDS];
+  flip_hash_endianness(signatures[thread_id].fors_merkle_proofs[fors_tree_index].preimage, fors_node);
+
+  uint64 tree_address = signatures[thread_id].tree_address;
+  uint signing_keypair_address = signatures[thread_id].signing_keypair_address;
+  uint fors_node_index_in_tree = signatures[thread_id].fors_indices[fors_tree_index];
+  uint fors_node_index_global  = fors_tree_index * FORS_LEAVES_COUNT + fors_node_index_in_tree;
+
+  uint schedule[64];
+  define_schedule_1hash(
+    0, /* layer_address */
+    ADRS_TYPE_FORS_TREE,
+    signing_keypair_address,
+    0, /* tree_height */
+    fors_node_index_global,
+    signatures[thread_id].tree_address,
+    fors_node,
+    schedule
+  );
+  uint sha_state[8] = pk_seed_midstate;
+  sha256_rounds_all(sha_state, schedule);
+
+  for (uint i = 0; i < HASH_WORDS; i++) {
+    fors_node[i] = sha_state[i];
+  }
+
+  for (uint node_height = 1; node_height <= FORS_TREE_HEIGHT; node_height++) {
+    uint peer_node[HASH_WORDS];
+    flip_hash_endianness(
+      signatures[thread_id].fors_merkle_proofs[fors_tree_index].merkle_path[node_height - 1],
+      peer_node
+    );
+
+    // Handle left/right side nodes in the tree
+    if (((fors_node_index_in_tree >> (node_height - 1)) & 1) == 1) {
+      uint tmp[HASH_WORDS] = fors_node;
+      fors_node = peer_node;
+      peer_node = tmp;
+    }
+
+    uint node_index = fors_node_index_global >> node_height;
+    define_schedule_2hash(
+      0, /* layer_address */
+      ADRS_TYPE_FORS_TREE,
+      signing_keypair_address,
+      node_height,
+      node_index,
+      tree_address,
+      fors_node,
+      peer_node,
+      schedule
+    );
+    sha_state = pk_seed_midstate;
+    sha256_rounds_all(sha_state, schedule);
+    for (uint i = 0; i < HASH_WORDS; i++) {
+      fors_node[i] = sha_state[i];
+    }
+  }
+
+  fors_root = fors_node;
+}
+
+#define FORS_ROOTS_WORDS (FORS_TREE_COUNT * HASH_WORDS)
+
+void compute_fors_pubkey(
+  uint64 tree_address,
+  uint signing_keypair_address,
+  const in uint pk_seed_midstate[8],
+  const in uint fors_roots[FORS_ROOTS_WORDS],
+  out uint fors_pubkey[HASH_WORDS]
+) {
+
+  uint offset_words_queue[FORS_ROOTS_WORDS + 1];
+  offset_words_queue[0] = fors_roots[0] >> 16;
+  for (uint i = 1; i < FORS_ROOTS_WORDS; i++) {
+    offset_words_queue[i] = (fors_roots[i - 1] << 16) | (fors_roots[i] >> 16);
+  }
+  offset_words_queue[FORS_ROOTS_WORDS] = (fors_roots[FORS_ROOTS_WORDS - 1] << 16) | 0x8000;
+
+  uint schedule[64];
+
+  schedule[0] = (tree_address.hi >> 8);
+  schedule[1] = (tree_address.hi << 24) | (tree_address.lo >> 8);
+  schedule[2] = (tree_address.lo << 24) | (ADRS_TYPE_FORS_ROOTS << 16) | (signing_keypair_address >> 16);
+  schedule[3] = (signing_keypair_address << 16);
+  schedule[4] = 0;
+
+  // Fill and process the first block
+  uint ctr = 0;
+  for (uint i = 0; i < 11; i++) {
+    schedule[5 + i] = offset_words_queue[ctr++];
+  }
+  uint sha_state[8] = pk_seed_midstate;
+  sha256_rounds_all(sha_state, schedule);
+
+  // Fill and compute intermediate blocks
+  for (uint q = 0; q < (FORS_ROOTS_WORDS - 10) / 16; q++) {
+    uint q16 = q * 16;
+    for (uint i = 0; i < 16; i++) {
+      schedule[i] = offset_words_queue[ctr++];
+    }
+    sha256_rounds_all(sha_state, schedule);
+  }
+
+  // Fill and compute the last block
+  uint k;
+  for (k = 0; ctr < FORS_ROOTS_WORDS + 1; k++) {
+    schedule[k] = offset_words_queue[ctr++];
+  }
+  for (; k < 15; k++) {
+    schedule[k] = 0;
+  }
+  schedule[15] = 8 * (64 + 22 + FORS_ROOTS_WORDS * 4); // msg_bit_len
+  sha256_rounds_all(sha_state, schedule);
+
+  for (uint i = 0; i < HASH_WORDS; i++) {
+    fors_pubkey[i] = sha_state[i];
+  }
+}
+
 void main() {
   uint thread_id = gl_GlobalInvocationID.x;
   if (thread_id >= signatures_len) return;
 
-  verify_results[thread_id] = signatures[thread_id].pk_seed[0];
+  uint pk_seed_midstate[8] = {
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+  };
+  uint schedule[64];
+
+  // Hash the PK seed block to generate the cached SHA256 midstate
+  for (uint i = 0; i < HASH_WORDS; i++)
+    schedule[i] = flip_endianness(signatures[thread_id].pk_seed[i]);
+  for (uint i = HASH_WORDS; i < 64; i++)
+    schedule[i] = 0;
+  sha256_rounds_all(pk_seed_midstate, schedule);
+
+  uint64 tree_address = signatures[thread_id].tree_address;
+  uint signing_keypair_address = signatures[thread_id].signing_keypair_address;
+
+  uint fors_roots[FORS_ROOTS_WORDS];
+  uint fors_root[HASH_WORDS];
+  for (uint i = 0; i < FORS_TREE_COUNT; i++) {
+    compute_fors_root(
+      thread_id,
+      pk_seed_midstate,
+      i, /* fors_tree_index */
+      fors_root
+    );
+    uint i4 = i * HASH_WORDS;
+    for (uint j = 0; j < HASH_WORDS; j++) {
+      fors_roots[i4 + j] = fors_root[j];
+    }
+  }
+
+  uint fors_pubkey[HASH_WORDS];
+  compute_fors_pubkey(
+    tree_address,
+    signing_keypair_address,
+    pk_seed_midstate,
+    fors_roots,
+    fors_pubkey
+  );
+
+  // Convert the FORS pubkey to a base-W message for XMSS verification;
+  uint wots_message[WOTS_CHAIN_COUNT];
+  convert_to_base_w(fors_pubkey, wots_message);
 }
