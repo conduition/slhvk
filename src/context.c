@@ -9,16 +9,16 @@
 #include "hashing.h"
 #include "vkutil.h"
 #include "context.h"
-#include "shaders/wots_tips_precompute.h"
-#include "shaders/xmss_leaves_precompute.h"
-#include "shaders/xmss_merkle_sign.h"
 #include "shaders/keygen_wots_tips.h"
 #include "shaders/keygen_xmss_leaves.h"
 #include "shaders/keygen_xmss_roots.h"
+#include "shaders/signing_wots_tips_precompute.h"
+#include "shaders/signing_xmss_leaves_precompute.h"
+#include "shaders/signing_xmss_merkle_sign.h"
+#include "shaders/signing_wots_sign.h"
+#include "shaders/signing_fors_leaves_gen.h"
+#include "shaders/signing_fors_merkle_sign.h"
 #include "shaders/verify.h"
-#include "shaders/wots_sign.h"
-#include "shaders/fors_leaves_gen.h"
-#include "shaders/fors_merkle_sign.h"
 
 #define MAX_DESCRIPTOR_SETS_PER_DEVICE 10
 #define MAX_DESCRIPTORS_PER_DEVICE     20
@@ -712,23 +712,23 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
   };
 
-  shaderCreateInfo.pCode = (uint32_t*) wots_tips_precompute_spv,
-  shaderCreateInfo.codeSize = wots_tips_precompute_spv_len,
+  shaderCreateInfo.pCode = (uint32_t*) signing_wots_tips_precompute_spv,
+  shaderCreateInfo.codeSize = signing_wots_tips_precompute_spv_len,
   err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->wotsTipsPrecomputeShader);
   if (err) goto cleanup;
 
-  shaderCreateInfo.pCode = (uint32_t*) xmss_leaves_precompute_spv,
-  shaderCreateInfo.codeSize = xmss_leaves_precompute_spv_len,
+  shaderCreateInfo.pCode = (uint32_t*) signing_xmss_leaves_precompute_spv,
+  shaderCreateInfo.codeSize = signing_xmss_leaves_precompute_spv_len,
   err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->xmssLeavesPrecomputeShader);
   if (err) goto cleanup;
 
-  shaderCreateInfo.pCode = (uint32_t*) xmss_merkle_sign_spv,
-  shaderCreateInfo.codeSize = xmss_merkle_sign_spv_len,
+  shaderCreateInfo.pCode = (uint32_t*) signing_xmss_merkle_sign_spv,
+  shaderCreateInfo.codeSize = signing_xmss_merkle_sign_spv_len,
   err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->xmssMerkleSignShader);
   if (err) goto cleanup;
 
-  shaderCreateInfo.pCode = (uint32_t*) wots_sign_spv,
-  shaderCreateInfo.codeSize = wots_sign_spv_len,
+  shaderCreateInfo.pCode = (uint32_t*) signing_wots_sign_spv,
+  shaderCreateInfo.codeSize = signing_wots_sign_spv_len,
   err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->wotsSignShader);
   if (err) goto cleanup;
 
@@ -752,13 +752,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   err = vkCreateShaderModule(ctx->primaryDevice, &shaderCreateInfo, NULL, &ctx->verifyShader);
   if (err) goto cleanup;
 
-  shaderCreateInfo.pCode = (uint32_t*) fors_leaves_gen_spv,
-  shaderCreateInfo.codeSize = fors_leaves_gen_spv_len,
+  shaderCreateInfo.pCode = (uint32_t*) signing_fors_leaves_gen_spv,
+  shaderCreateInfo.codeSize = signing_fors_leaves_gen_spv_len,
   err = vkCreateShaderModule(ctx->secondaryDevice, &shaderCreateInfo, NULL, &ctx->forsLeavesGenShader);
   if (err) goto cleanup;
 
-  shaderCreateInfo.pCode = (uint32_t*) fors_merkle_sign_spv,
-  shaderCreateInfo.codeSize = fors_merkle_sign_spv_len,
+  shaderCreateInfo.pCode = (uint32_t*) signing_fors_merkle_sign_spv,
+  shaderCreateInfo.codeSize = signing_fors_merkle_sign_spv_len,
   err = vkCreateShaderModule(ctx->secondaryDevice, &shaderCreateInfo, NULL, &ctx->forsMerkleSignShader);
   if (err) goto cleanup;
 
