@@ -32,8 +32,8 @@ int main() {
     return err;
   }
 
-  const uint8_t** skSeeds = malloc(testCasesCount * sizeof(uint8_t*));
-  const uint8_t** pkSeeds = malloc(testCasesCount * sizeof(uint8_t*));
+  uint8_t** skSeeds = malloc(testCasesCount * sizeof(uint8_t*));
+  uint8_t** pkSeeds = malloc(testCasesCount * sizeof(uint8_t*));
   uint8_t** pkRoots = malloc(testCasesCount * sizeof(uint8_t*));
   uint8_t* pkRootsBacking = malloc(testCasesCount * SLHVK_N);
 
@@ -42,7 +42,6 @@ int main() {
     pkSeeds[i] = &testCases[i].pkSeed[0];
     pkRoots[i] = &pkRootsBacking[i * SLHVK_N];
   }
-
 
   Time start, end;
   getTime(&start);

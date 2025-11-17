@@ -21,9 +21,9 @@ int main() {
   uint8_t pkRoot[SLHVK_N] = {0x8f, 0x0c, 0x8e, 0xe4, 0xaf, 0xdf, 0xc4, 0x64,
                              0x61, 0x75, 0xc8, 0x35, 0x1e, 0x17, 0x6a, 0x2f};
 
-  const uint8_t message[] = "hello world";
-  const uint8_t contextString[] = "string";
-  const uint8_t addrnd[] = {5, 4, 3, 2, 1, 0, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+  uint8_t message[] = "hello world";
+  uint8_t contextString[] = "string";
+  uint8_t addrnd[] = {5, 4, 3, 2, 1, 0, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
 
   uint8_t slhDsaSignature[SLHVK_SIGNATURE_SIZE];
 

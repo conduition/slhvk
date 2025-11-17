@@ -87,8 +87,8 @@ int slhvkSignPure(
 int slhvkKeygen(
   SlhvkContext ctx,
   uint32_t keysCount,
-  const uint8_t* const* skSeeds,
-  const uint8_t* const* pkSeeds,
+  uint8_t** skSeeds,
+  uint8_t** pkSeeds,
   uint8_t** pkRootsOut
 );
 

@@ -21,8 +21,8 @@ int main() {
                              0x01, 0x02, 0x03, 0x04, 0xaa, 0xbb, 0xcc, 0xdd};
 
   #define KEYGEN_RUNS 512
-  const uint8_t* skSeeds[KEYGEN_RUNS];
-  const uint8_t* pkSeeds[KEYGEN_RUNS];
+  uint8_t* skSeeds[KEYGEN_RUNS];
+  uint8_t* pkSeeds[KEYGEN_RUNS];
   uint8_t pkRoots[KEYGEN_RUNS][SLHVK_N];
   uint8_t* pkRootsPtr[KEYGEN_RUNS];
 
