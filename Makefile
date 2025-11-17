@@ -55,7 +55,7 @@ TEST_BIN        := $(TEST_SRC:.c=.test)
 TEST_VENDOR_SRC := tests/vendor/cJSON.c
 TEST_VENDOR_OBJ := $(TEST_VENDOR_SRC:.c=.o)
 TEST_HDR        := tests/utils.h tests/acvp.h
-TEST_CFLAGS     := $(CFLAGS) -Isrc -Llib
+TEST_CFLAGS     := $(CFLAGS) -Llib
 TEST_VEC_DIR    := tests/vectors
 
 %.test: %.c $(TEST_HDR) $(HDR) lib/libslhvk.a $(TEST_VENDOR_OBJ)
