@@ -20,7 +20,7 @@ layout(binding = 0) buffer sig {
 };
 
 layout(binding = 1) buffer res {
-  uint verify_results[];
+  uint verify_results[][HASH_WORDS];
 };
 
 void flip_hash_endianness(
@@ -158,6 +158,92 @@ void compute_fors_pubkey(
   }
 }
 
+void xmss_compute_root(
+  uint layer_address,
+  uint64 tree_address,
+  uint keypair_address,
+  const in uint pk_seed_midstate[8],
+  const in uint wots_message[WOTS_CHAIN_COUNT],
+  const in XmssSignature xmss_sig,
+  out uint xmss_root[HASH_WORDS]
+) {
+  uint schedule[64];
+
+  // Begin WOTS tip computation
+  uint wots_tip_hashes[WOTS_TIPS_WORDS];
+  for (uint chain_address = 0; chain_address < WOTS_CHAIN_COUNT; chain_address++) {
+    schedule[0] = (layer_address << 24)   | (tree_address.hi >> 8);
+    schedule[1] = (tree_address.hi << 24) | (tree_address.lo >> 8);
+    schedule[2] = (tree_address.lo << 24) | (ADRS_TYPE_WOTS_HASH << 16) | (keypair_address >> 16);
+    schedule[3] = (keypair_address << 16) | (chain_address >> 16);
+    schedule[4] = (chain_address << 16);
+
+    uint fifth_round_state[8] = pk_seed_midstate;
+    sha256_rounds_0_thru_5(fifth_round_state, schedule);
+
+    // SHA256 message length in bits.
+    // 8 * (
+    //   64             [pk_seed and padding]
+    //   22             [compressed adrs]
+    //   HASH_WORDS * 4 [hash]
+    // )
+    schedule[15] = 8 * (64 + 22 + 4 * HASH_WORDS);
+
+    uint tip_state[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    for (uint i = 0; i < HASH_WORDS; i++) {
+      tip_state[i] = flip_endianness(xmss_sig.wots_hashes[chain_address][i]);
+    }
+    for (uint hash_address = wots_message[chain_address]; hash_address < WOTS_CHAIN_LEN - 1; hash_address++) {
+      define_schedule_1hash_midwords(tip_state, hash_address, schedule)
+      tip_state = fifth_round_state;
+      sha256_rounds_5_thru_64(tip_state, schedule, pk_seed_midstate);
+    }
+
+    uint offset = chain_address * HASH_WORDS;
+    for (uint i = 0; i < HASH_WORDS; i++) {
+      wots_tip_hashes[offset + i] = tip_state[i];
+    }
+  }
+
+  // Compute XMSS leaf node from the WOTS chain hash tips
+  uint xmss_node[HASH_WORDS];
+  compute_xmss_leaf(layer_address, tree_address, keypair_address, pk_seed_midstate, wots_tip_hashes, xmss_node);
+
+  // begin XMSS merkle root computation
+  uint xmss_node_index = keypair_address;
+  uint peer_node[HASH_WORDS];
+  uint sha_state[8];
+  for (uint node_height = 1; node_height <= XMSS_HEIGHT; node_height++) {
+    if ((xmss_node_index & 1) == 1) {
+      peer_node = xmss_node;
+      flip_hash_endianness(xmss_sig.xmss_merkle_path[node_height - 1], xmss_node);
+    } else {
+      flip_hash_endianness(xmss_sig.xmss_merkle_path[node_height - 1], peer_node);
+    }
+    xmss_node_index >>= 1;
+    define_schedule_2hash(
+      layer_address,
+      ADRS_TYPE_TREE,
+      0, /* keypair_address */
+      node_height,
+      xmss_node_index,
+      tree_address,
+      xmss_node, /* left child */
+      peer_node, /* right child */
+      schedule
+    );
+    sha_state = pk_seed_midstate;
+    sha256_rounds_all(sha_state, schedule);
+    for (uint i = 0; i < HASH_WORDS; i++) {
+      xmss_node[i] = sha_state[i];
+    }
+  }
+
+  for (uint i = 0; i < HASH_WORDS; i++) {
+    xmss_root[i] = xmss_node[i];
+  }
+}
+
 void main() {
   uint thread_id = gl_GlobalInvocationID.x;
   if (thread_id >= signatures_len) return;
@@ -205,4 +291,30 @@ void main() {
   // Convert the FORS pubkey to a base-W message for XMSS verification;
   uint wots_message[WOTS_CHAIN_COUNT];
   convert_to_base_w(fors_pubkey, wots_message);
+
+  uint64 tree_address_shifted = tree_address;
+  uint keypair_address = signing_keypair_address;
+  uint xmss_root[HASH_WORDS];
+
+  for (uint layer_address = 0; layer_address < HYPERTREE_LAYERS; layer_address++) {
+    xmss_compute_root(
+      layer_address,
+      tree_address_shifted,
+      keypair_address,
+      pk_seed_midstate,
+      wots_message,
+      signatures[thread_id].xmss_signatures[layer_address],
+      xmss_root
+    );
+
+    // prep for next iteration
+    convert_to_base_w(xmss_root, wots_message);
+
+    keypair_address = tree_address_shifted.lo & (XMSS_LEAVES - 1);
+    tree_address_shifted.lo = (tree_address_shifted.hi << (32 - XMSS_HEIGHT)) | (tree_address_shifted.lo >> XMSS_HEIGHT);
+    tree_address_shifted.hi >>= XMSS_HEIGHT;
+  }
+
+  // xmss_root now stores the hypertree root hash. Write it to output in big-endian format.
+  flip_hash_endianness(xmss_root, verify_results[thread_id]);
 }

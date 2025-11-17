@@ -102,5 +102,5 @@ int slhvkVerifyPure(
   const uint8_t* const* signatures,
   const uint8_t* const* messages,
   const size_t* messageSizes,
-  uint32_t* verifyResultsOut
+  int* verifyResultsOut
 );

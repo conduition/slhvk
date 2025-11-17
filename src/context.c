@@ -2400,7 +2400,7 @@ int slhvkVerifyPure(
   const uint8_t* const* signatures,
   const uint8_t* const* messages,
   const size_t* messageSizes,
-  uint32_t* verifyResultsOut
+  int* verifyResultsOut
 ) {
   int err = 0;
   VkBuffer signaturesBuffer = NULL;
@@ -2415,11 +2415,19 @@ int slhvkVerifyPure(
 
   VkFence fence = NULL;
 
-  // TODO: compute dynamically
-  const uint32_t signaturesChunkCount = signaturesLen > 1024 ? signaturesLen : 1024;
+  uint32_t signaturesChunkCount = signaturesLen;
+
+  // Scale the chunks size down until we meet device limits.
+  VkPhysicalDeviceLimits* limits = &ctx->primaryDeviceProperties.limits;
+  while (
+    numWorkGroups(signaturesChunkCount) > limits->maxComputeWorkGroupCount[0] ||
+    signaturesChunkCount * sizeof(SlhvkSignatureVerifyRequest) > limits->maxStorageBufferRange
+  ) {
+    signaturesChunkCount >>= 1;
+  }
 
   const size_t signaturesBufferSize = signaturesChunkCount * sizeof(SlhvkSignatureVerifyRequest);
-  const size_t verifyResultsBufferSize = signaturesChunkCount * sizeof(uint32_t);
+  const size_t verifyResultsBufferSize = signaturesChunkCount * N;
 
 
   /**********  Create verification buffers  *************/
@@ -2511,7 +2519,6 @@ int slhvkVerifyPure(
     VERIFY_PIPELINE_DESCRIPTOR_COUNT,
     ctx->verifyDescriptorSet
   );
-
 
 
   /********  allocate and fill a verification command buffer  *********/
@@ -2655,8 +2662,8 @@ int slhvkVerifyPure(
     err = vkResetFences(ctx->primaryDevice, 1, &fence);
     if (err) goto cleanup;
 
-    // Read the verification output results
-    uint32_t* verifyResultsMapped;
+    // Read the verification output result PK roots
+    uint8_t (*verifyResultsMapped)[N];
     err = vkMapMemory(
       ctx->primaryDevice,
       verifyResultsOutputMemory,
@@ -2667,11 +2674,9 @@ int slhvkVerifyPure(
     );
     if (err) goto cleanup;
     size_t resultsLen = min(signaturesChunkCount, signaturesLen - sigsChecked);
-    memcpy(
-      &verifyResultsOut[sigsChecked],
-      verifyResultsMapped,
-      resultsLen * sizeof(uint32_t)
-    );
+    for (uint32_t i = 0; i < resultsLen; i++) {
+      verifyResultsOut[sigsChecked + i] = memcmp(verifyResultsMapped[i], pkRoots[i], N);
+    }
     vkUnmapMemory(ctx->primaryDevice, verifyResultsOutputMemory);
   }
 
