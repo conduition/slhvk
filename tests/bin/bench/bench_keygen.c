@@ -9,12 +9,17 @@
 int main() {
   initTest();
 
+  Time initStart, initEnd;
+  getTime(&initStart);
+
   SlhvkContext ctx;
   int err = slhvkContextInit(&ctx);
   if (err) {
     eprintf("failed to init context: %d\n", err);
     return err;
   }
+  getTime(&initEnd);
+  printf("initialized SLHVK context in %.2f ms\n", timeDeltaMillis(initStart, initEnd));
 
   uint8_t pkSeed[SLHVK_N] = {16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
   uint8_t skSeed[SLHVK_N] = {0x00, 0x00, 0x11, 0x22, 0xff, 0x29, 0x99, 0x90,
