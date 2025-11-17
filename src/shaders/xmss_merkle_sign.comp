@@ -4,17 +4,17 @@
 
 // The working buffer for XMSS node computations.
 // Prefilled with WOTS public keys.
-layout(binding = 1) buffer xmssnodes {
+layout(binding = 2) buffer xmssnodes {
   uint xmss_node_states[HYPERTREE_LAYERS][XMSS_LEAVES][HASH_WORDS];
 };
 
 // The hypertree signature (a chain of XMSS signatures)
-layout(binding = 2) buffer htsig {
+layout(binding = 3) buffer htsig {
   XmssSignature hypertree_signature[HYPERTREE_LAYERS];
 };
 
 // XMSS root hashes, converted into checksummed base-W messages (for WOTS signing).
-layout(binding = 3) buffer rootmsg {
+layout(binding = 4) buffer rootmsg {
   uint xmss_root_messages[HYPERTREE_LAYERS][WOTS_CHAIN_COUNT];
 };
 

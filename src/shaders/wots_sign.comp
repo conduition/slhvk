@@ -3,12 +3,12 @@
 #include "signing_common.comp"
 
 // The hypertree signature (a chain of XMSS signatures)
-layout(binding = 1) buffer htsig {
+layout(binding = 3) buffer htsig {
   XmssSignature hypertree_signature[HYPERTREE_LAYERS];
 };
 
 // XMSS root hashes, converted into checksummed base-W messages (for WOTS signing).
-layout(binding = 2) buffer rootmsg {
+layout(binding = 4) buffer rootmsg {
   uint xmss_root_messages[HYPERTREE_LAYERS][WOTS_CHAIN_COUNT];
 };
 

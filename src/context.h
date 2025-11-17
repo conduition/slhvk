@@ -6,13 +6,8 @@
 
 #define N SLHVK_N
 
-#define WOTS_TIPS_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT 2
-#define XMSS_LEAVES_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT 3
-#define XMSS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT 4
-#define WOTS_SIGN_PIPELINE_DESCRIPTOR_COUNT 3
-#define FORS_LEAVES_GEN_PIPELINE_DESCRIPTOR_COUNT 4
-#define FORS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT 4
-
+#define PRIMARY_SIGNING_PIPELINE_DESCRIPTOR_COUNT 5
+#define SECONDARY_SIGNING_PIPELINE_DESCRIPTOR_COUNT 4
 #define KEYGEN_PIPELINE_DESCRIPTOR_COUNT 4
 #define VERIFY_PIPELINE_DESCRIPTOR_COUNT 2
 
@@ -50,35 +45,38 @@ typedef struct SlhvkContext_T {
   VkDescriptorPool           primaryDescriptorPool;
   VkCommandPool              primaryCommandPool;
 
-  // WOTS chain precompute pipeline resources
+  // Resources for the secondary device
+  VkPhysicalDevice           secondaryPhysicalDevice;
+  VkPhysicalDeviceProperties secondaryDeviceProperties;
+  uint32_t                   secondaryDeviceQueueFamily;
+  VkDevice                   secondaryDevice;
+  VkDescriptorPool           secondaryDescriptorPool;
+  VkCommandPool              secondaryCommandPool;
+
+
+  /*******  Signing resources (primary)  **********/
   VkShaderModule        wotsTipsPrecomputeShader;
-  VkPipeline            wotsTipsPrecomputePipeline;
-  VkPipelineLayout      wotsTipsPrecomputePipelineLayout;
-  VkDescriptorSet       wotsTipsPrecomputeDescriptorSet;
-  VkDescriptorSetLayout wotsTipsPrecomputeDescriptorSetLayout;
-
-  // XMSS leaf precompute pipeline resources
   VkShaderModule        xmssLeavesPrecomputeShader;
-  VkPipeline            xmssLeavesPrecomputePipeline;
-  VkPipelineLayout      xmssLeavesPrecomputePipelineLayout;
-  VkDescriptorSet       xmssLeavesPrecomputeDescriptorSet;
-  VkDescriptorSetLayout xmssLeavesPrecomputeDescriptorSetLayout;
-
-  // XMSS merkle signing pipeline resources
   VkShaderModule        xmssMerkleSignShader;
-  VkPipeline            xmssMerkleSignPipeline;
-  VkPipelineLayout      xmssMerkleSignPipelineLayout;
-  VkDescriptorSet       xmssMerkleSignDescriptorSet;
-  VkDescriptorSetLayout xmssMerkleSignDescriptorSetLayout;
-
-  // WOTS signing pipeline resources
   VkShaderModule        wotsSignShader;
+  VkPipeline            wotsTipsPrecomputePipeline;
+  VkPipeline            xmssLeavesPrecomputePipeline;
+  VkPipeline            xmssMerkleSignPipeline;
   VkPipeline            wotsSignPipeline;
-  VkPipelineLayout      wotsSignPipelineLayout;
-  VkDescriptorSet       wotsSignDescriptorSet;
-  VkDescriptorSetLayout wotsSignDescriptorSetLayout;
+  VkPipelineLayout      primarySigningPipelineLayout;
+  VkDescriptorSetLayout primarySigningDescriptorSetLayout;
+  VkDescriptorSet       primarySigningDescriptorSet;
 
-  /*******   Keygen resources  ***********/
+  /*******  Signing resources (secondary)  **********/
+  VkShaderModule        forsLeavesGenShader;
+  VkShaderModule        forsMerkleSignShader;
+  VkPipeline            forsLeavesGenPipeline;
+  VkPipeline            forsMerkleSignPipeline;
+  VkPipelineLayout      secondarySigningPipelineLayout;
+  VkDescriptorSetLayout secondarySigningDescriptorSetLayout;
+  VkDescriptorSet       secondarySigningDescriptorSet;
+
+  /*******  Keygen resources  ***********/
   VkShaderModule        keygenWotsTipsShader;
   VkShaderModule        keygenXmssLeavesShader;
   VkShaderModule        keygenXmssRootsShader;
@@ -116,36 +114,6 @@ typedef struct SlhvkContext_T {
   VkDeviceMemory primaryHypertreeSignatureBufferDeviceLocalMemory;
   VkDeviceMemory primaryHypertreeSignatureBufferHostVisibleMemory;
 
-  // primary device memory metadata
-  VkMemoryPropertyFlags primaryDeviceLocalMemoryFlags;
-  VkMemoryPropertyFlags primaryDeviceHostVisibleMemoryFlags;
-
-  // primary device command buffers
-  VkCommandBuffer primaryHypertreePresignCommandBuffer;
-  VkCommandBuffer primaryHypertreeFinishCommandBuffer;
-
-  // Resources for the secondary device
-  VkPhysicalDevice           secondaryPhysicalDevice;
-  VkPhysicalDeviceProperties secondaryDeviceProperties;
-  uint32_t                   secondaryDeviceQueueFamily;
-  VkDevice                   secondaryDevice;
-  VkDescriptorPool           secondaryDescriptorPool;
-  VkCommandPool              secondaryCommandPool;
-
-  // FORS leaves gen pipeline resources
-  VkShaderModule        forsLeavesGenShader;
-  VkPipeline            forsLeavesGenPipeline;
-  VkPipelineLayout      forsLeavesGenPipelineLayout;
-  VkDescriptorSet       forsLeavesGenDescriptorSet;
-  VkDescriptorSetLayout forsLeavesGenDescriptorSetLayout;
-
-  // FORS merkle sign pipeline resources
-  VkShaderModule        forsMerkleSignShader;
-  VkPipeline            forsMerkleSignPipeline;
-  VkPipelineLayout      forsMerkleSignPipelineLayout;
-  VkDescriptorSet       forsMerkleSignDescriptorSet;
-  VkDescriptorSetLayout forsMerkleSignDescriptorSetLayout;
-
   // secondary device buffers
   VkBuffer secondaryInputsBufferDeviceLocal;
   VkBuffer secondaryInputsBufferHostVisible;
@@ -166,9 +134,17 @@ typedef struct SlhvkContext_T {
   VkDeviceMemory secondaryForsSignatureBufferHostVisibleMemory;
   VkDeviceMemory secondaryForsRootsBufferMemory;
 
+  // primary device memory metadata
+  VkMemoryPropertyFlags primaryDeviceLocalMemoryFlags;
+  VkMemoryPropertyFlags primaryDeviceHostVisibleMemoryFlags;
+
   // secondary device memory metadata
   VkMemoryPropertyFlags secondaryDeviceLocalMemoryFlags;
   VkMemoryPropertyFlags secondaryDeviceHostVisibleMemoryFlags;
+
+  // primary device command buffers
+  VkCommandBuffer primaryHypertreePresignCommandBuffer;
+  VkCommandBuffer primaryHypertreeFinishCommandBuffer;
 
   // secondary device command buffer
   VkCommandBuffer secondaryForsCommandBuffer;

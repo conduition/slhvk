@@ -74,6 +74,26 @@ void slhvkContextFree(SlhvkContext_T* ctx) {
       vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsSignatureBufferHostVisibleMemory, NULL);
       vkFreeMemory(ctx->secondaryDevice, ctx->secondaryForsRootsBufferMemory, NULL);
 
+      // Primary signing resources
+      vkDestroyShaderModule(ctx->primaryDevice, ctx->wotsTipsPrecomputeShader, NULL);
+      vkDestroyShaderModule(ctx->primaryDevice, ctx->xmssLeavesPrecomputeShader, NULL);
+      vkDestroyShaderModule(ctx->primaryDevice, ctx->xmssMerkleSignShader, NULL);
+      vkDestroyShaderModule(ctx->primaryDevice, ctx->wotsSignShader, NULL);
+      vkDestroyPipeline(ctx->primaryDevice, ctx->wotsTipsPrecomputePipeline, NULL);
+      vkDestroyPipeline(ctx->primaryDevice, ctx->xmssLeavesPrecomputePipeline, NULL);
+      vkDestroyPipeline(ctx->primaryDevice, ctx->xmssMerkleSignPipeline, NULL);
+      vkDestroyPipeline(ctx->primaryDevice, ctx->wotsSignPipeline, NULL);
+      vkDestroyPipelineLayout(ctx->primaryDevice, ctx->primarySigningPipelineLayout, NULL);
+      vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->primarySigningDescriptorSetLayout, NULL);
+
+      // Secondary signing resources
+      vkDestroyShaderModule(ctx->secondaryDevice, ctx->forsLeavesGenShader, NULL);
+      vkDestroyShaderModule(ctx->secondaryDevice, ctx->forsMerkleSignShader, NULL);
+      vkDestroyPipeline(ctx->secondaryDevice, ctx->forsLeavesGenPipeline, NULL);
+      vkDestroyPipeline(ctx->secondaryDevice, ctx->forsMerkleSignPipeline, NULL);
+      vkDestroyPipelineLayout(ctx->secondaryDevice, ctx->secondarySigningPipelineLayout, NULL);
+      vkDestroyDescriptorSetLayout(ctx->secondaryDevice, ctx->secondarySigningDescriptorSetLayout, NULL);
+
       // Keygen resources
       vkDestroyShaderModule(ctx->primaryDevice, ctx->keygenWotsTipsShader, NULL);
       vkDestroyShaderModule(ctx->primaryDevice, ctx->keygenXmssLeavesShader, NULL);
@@ -89,42 +109,6 @@ void slhvkContextFree(SlhvkContext_T* ctx) {
       vkDestroyPipeline(ctx->primaryDevice, ctx->verifyPipeline, NULL);
       vkDestroyPipelineLayout(ctx->primaryDevice, ctx->verifyPipelineLayout, NULL);
       vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->verifyDescriptorSetLayout, NULL);
-
-      // WOTS tip precompute pipeline
-      vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->wotsTipsPrecomputeDescriptorSetLayout, NULL);
-      vkDestroyPipeline(ctx->primaryDevice, ctx->wotsTipsPrecomputePipeline, NULL);
-      vkDestroyPipelineLayout(ctx->primaryDevice, ctx->wotsTipsPrecomputePipelineLayout, NULL);
-      vkDestroyShaderModule(ctx->primaryDevice, ctx->wotsTipsPrecomputeShader, NULL);
-
-      // XMSS leaf precompute pipeline
-      vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->xmssLeavesPrecomputeDescriptorSetLayout, NULL);
-      vkDestroyPipeline(ctx->primaryDevice, ctx->xmssLeavesPrecomputePipeline, NULL);
-      vkDestroyPipelineLayout(ctx->primaryDevice, ctx->xmssLeavesPrecomputePipelineLayout, NULL);
-      vkDestroyShaderModule(ctx->primaryDevice, ctx->xmssLeavesPrecomputeShader, NULL);
-
-      // XMSS merkle sign pipeline
-      vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->xmssMerkleSignDescriptorSetLayout, NULL);
-      vkDestroyPipeline(ctx->primaryDevice, ctx->xmssMerkleSignPipeline, NULL);
-      vkDestroyPipelineLayout(ctx->primaryDevice, ctx->xmssMerkleSignPipelineLayout, NULL);
-      vkDestroyShaderModule(ctx->primaryDevice, ctx->xmssMerkleSignShader, NULL);
-
-      // WOTS sign pipeline
-      vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->wotsSignDescriptorSetLayout, NULL);
-      vkDestroyPipeline(ctx->primaryDevice, ctx->wotsSignPipeline, NULL);
-      vkDestroyPipelineLayout(ctx->primaryDevice, ctx->wotsSignPipelineLayout, NULL);
-      vkDestroyShaderModule(ctx->primaryDevice, ctx->wotsSignShader, NULL);
-
-      // FORS leaves gen pipeline
-      vkDestroyDescriptorSetLayout(ctx->secondaryDevice, ctx->forsLeavesGenDescriptorSetLayout, NULL);
-      vkDestroyPipeline(ctx->secondaryDevice, ctx->forsLeavesGenPipeline, NULL);
-      vkDestroyPipelineLayout(ctx->secondaryDevice, ctx->forsLeavesGenPipelineLayout, NULL);
-      vkDestroyShaderModule(ctx->secondaryDevice, ctx->forsLeavesGenShader, NULL);
-
-      // FORS merkle sign pipeline
-      vkDestroyDescriptorSetLayout(ctx->secondaryDevice, ctx->forsMerkleSignDescriptorSetLayout, NULL);
-      vkDestroyPipeline(ctx->secondaryDevice, ctx->forsMerkleSignPipeline, NULL);
-      vkDestroyPipelineLayout(ctx->secondaryDevice, ctx->forsMerkleSignPipelineLayout, NULL);
-      vkDestroyShaderModule(ctx->secondaryDevice, ctx->forsMerkleSignShader, NULL);
 
       // primary device-wide resources
       vkDestroyCommandPool(ctx->primaryDevice, ctx->primaryCommandPool, NULL);
@@ -587,29 +571,15 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
 
   err = slhvkSetupDescriptorSetLayout(
     ctx->primaryDevice,
-    WOTS_TIPS_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT,
-    &ctx->wotsTipsPrecomputeDescriptorSetLayout
+    PRIMARY_SIGNING_PIPELINE_DESCRIPTOR_COUNT,
+    &ctx->primarySigningDescriptorSetLayout
   );
   if (err) goto cleanup;
 
   err = slhvkSetupDescriptorSetLayout(
-    ctx->primaryDevice,
-    XMSS_LEAVES_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT,
-    &ctx->xmssLeavesPrecomputeDescriptorSetLayout
-  );
-  if (err) goto cleanup;
-
-  err = slhvkSetupDescriptorSetLayout(
-    ctx->primaryDevice,
-    XMSS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT,
-    &ctx->xmssMerkleSignDescriptorSetLayout
-  );
-  if (err) goto cleanup;
-
-  err = slhvkSetupDescriptorSetLayout(
-    ctx->primaryDevice,
-    WOTS_SIGN_PIPELINE_DESCRIPTOR_COUNT,
-    &ctx->wotsSignDescriptorSetLayout
+    ctx->secondaryDevice,
+    SECONDARY_SIGNING_PIPELINE_DESCRIPTOR_COUNT,
+    &ctx->secondarySigningDescriptorSetLayout
   );
   if (err) goto cleanup;
 
@@ -627,20 +597,6 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   );
   if (err) goto cleanup;
 
-  err = slhvkSetupDescriptorSetLayout(
-    ctx->secondaryDevice,
-    FORS_LEAVES_GEN_PIPELINE_DESCRIPTOR_COUNT,
-    &ctx->forsLeavesGenDescriptorSetLayout
-  );
-  if (err) goto cleanup;
-
-  err = slhvkSetupDescriptorSetLayout(
-    ctx->secondaryDevice,
-    FORS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT,
-    &ctx->forsMerkleSignDescriptorSetLayout
-  );
-  if (err) goto cleanup;
-
 
   /*******************  Define pipeline layouts  **********************/
 
@@ -649,39 +605,21 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     .setLayoutCount = 1,
   };
 
-  pipelineLayoutCreateInfo.pSetLayouts = &ctx->wotsTipsPrecomputeDescriptorSetLayout,
+  pipelineLayoutCreateInfo.pSetLayouts = &ctx->primarySigningDescriptorSetLayout,
   err = vkCreatePipelineLayout(
     ctx->primaryDevice,
     &pipelineLayoutCreateInfo,
     NULL,
-    &ctx->wotsTipsPrecomputePipelineLayout
+    &ctx->primarySigningPipelineLayout
   );
   if (err) goto cleanup;
 
-  pipelineLayoutCreateInfo.pSetLayouts = &ctx->xmssLeavesPrecomputeDescriptorSetLayout,
+  pipelineLayoutCreateInfo.pSetLayouts = &ctx->secondarySigningDescriptorSetLayout,
   err = vkCreatePipelineLayout(
-    ctx->primaryDevice,
+    ctx->secondaryDevice,
     &pipelineLayoutCreateInfo,
     NULL,
-    &ctx->xmssLeavesPrecomputePipelineLayout
-  );
-  if (err) goto cleanup;
-
-  pipelineLayoutCreateInfo.pSetLayouts = &ctx->xmssMerkleSignDescriptorSetLayout,
-  err = vkCreatePipelineLayout(
-    ctx->primaryDevice,
-    &pipelineLayoutCreateInfo,
-    NULL,
-    &ctx->xmssMerkleSignPipelineLayout
-  );
-  if (err) goto cleanup;
-
-  pipelineLayoutCreateInfo.pSetLayouts = &ctx->wotsSignDescriptorSetLayout,
-  err = vkCreatePipelineLayout(
-    ctx->primaryDevice,
-    &pipelineLayoutCreateInfo,
-    NULL,
-    &ctx->wotsSignPipelineLayout
+    &ctx->secondarySigningPipelineLayout
   );
   if (err) goto cleanup;
 
@@ -709,27 +647,6 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   );
   if (err) goto cleanup;
 
-  pipelineLayoutCreateInfo.pPushConstantRanges = NULL;
-  pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-
-  pipelineLayoutCreateInfo.pSetLayouts = &ctx->forsLeavesGenDescriptorSetLayout,
-  err = vkCreatePipelineLayout(
-    ctx->secondaryDevice,
-    &pipelineLayoutCreateInfo,
-    NULL,
-    &ctx->forsLeavesGenPipelineLayout
-  );
-  if (err) goto cleanup;
-
-  pipelineLayoutCreateInfo.pSetLayouts = &ctx->forsMerkleSignDescriptorSetLayout,
-  err = vkCreatePipelineLayout(
-    ctx->secondaryDevice,
-    &pipelineLayoutCreateInfo,
-    NULL,
-    &ctx->forsMerkleSignPipelineLayout
-  );
-  if (err) goto cleanup;
-
 
   /*******************  Allocate primary descriptor sets  **********************/
 
@@ -739,20 +656,8 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     .descriptorSetCount = 1,                     // allocate a single descriptor set per pipeline.
   };
 
-  descriptorSetAllocateInfo.pSetLayouts = &ctx->wotsTipsPrecomputeDescriptorSetLayout;
-  err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->wotsTipsPrecomputeDescriptorSet);
-  if (err) goto cleanup;
-
-  descriptorSetAllocateInfo.pSetLayouts = &ctx->xmssLeavesPrecomputeDescriptorSetLayout;
-  err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->xmssLeavesPrecomputeDescriptorSet);
-  if (err) goto cleanup;
-
-  descriptorSetAllocateInfo.pSetLayouts = &ctx->xmssMerkleSignDescriptorSetLayout;
-  err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->xmssMerkleSignDescriptorSet);
-  if (err) goto cleanup;
-
-  descriptorSetAllocateInfo.pSetLayouts = &ctx->wotsSignDescriptorSetLayout;
-  err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->wotsSignDescriptorSet);
+  descriptorSetAllocateInfo.pSetLayouts = &ctx->primarySigningDescriptorSetLayout;
+  err = vkAllocateDescriptorSets(ctx->primaryDevice, &descriptorSetAllocateInfo, &ctx->primarySigningDescriptorSet);
   if (err) goto cleanup;
 
   descriptorSetAllocateInfo.pSetLayouts = &ctx->keygenDescriptorSetLayout;
@@ -767,93 +672,39 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   /*******************  Allocate secondary descriptor sets  **********************/
 
   descriptorSetAllocateInfo.descriptorPool = ctx->secondaryDescriptorPool;
-
-  descriptorSetAllocateInfo.pSetLayouts = &ctx->forsLeavesGenDescriptorSetLayout;
-  err = vkAllocateDescriptorSets(ctx->secondaryDevice, &descriptorSetAllocateInfo, &ctx->forsLeavesGenDescriptorSet);
+  descriptorSetAllocateInfo.pSetLayouts = &ctx->secondarySigningDescriptorSetLayout;
+  err = vkAllocateDescriptorSets(ctx->secondaryDevice, &descriptorSetAllocateInfo, &ctx->secondarySigningDescriptorSet);
   if (err) goto cleanup;
 
-  descriptorSetAllocateInfo.pSetLayouts = &ctx->forsMerkleSignDescriptorSetLayout;
-  err = vkAllocateDescriptorSets(ctx->secondaryDevice, &descriptorSetAllocateInfo, &ctx->forsMerkleSignDescriptorSet);
-  if (err) goto cleanup;
+  /*******************  Bind device buffers to descriptor sets  **********************/
 
-
-  /*******************  Bind primary device buffers to descriptor sets  **********************/
-
-  VkBuffer wotsTipsPrecomputeBuffers[WOTS_TIPS_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT] = {
+  VkBuffer primarySigningBuffers[PRIMARY_SIGNING_PIPELINE_DESCRIPTOR_COUNT] = {
     ctx->primaryInputsBufferDeviceLocal,
     ctx->primaryWotsChainBuffer,
-  };
-  slhvkBindBuffersToDescriptorSet(
-    ctx->primaryDevice,
-    wotsTipsPrecomputeBuffers,
-    WOTS_TIPS_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT,
-    ctx->wotsTipsPrecomputeDescriptorSet
-  );
-
-  VkBuffer xmssLeavesPrecomputeBuffers[XMSS_LEAVES_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT] = {
-    ctx->primaryInputsBufferDeviceLocal,
-    ctx->primaryWotsChainBuffer,
-    ctx->primaryXmssNodesBuffer,
-  };
-  slhvkBindBuffersToDescriptorSet(
-    ctx->primaryDevice,
-    xmssLeavesPrecomputeBuffers,
-    XMSS_LEAVES_PRECOMPUTE_PIPELINE_DESCRIPTOR_COUNT,
-    ctx->xmssLeavesPrecomputeDescriptorSet
-  );
-
-  VkBuffer xmssMerkleSignBuffers[XMSS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT] = {
-    ctx->primaryInputsBufferDeviceLocal,
     ctx->primaryXmssNodesBuffer,
     ctx->primaryHypertreeSignatureBufferDeviceLocal,
     ctx->primaryXmssMessagesBuffer,
   };
   slhvkBindBuffersToDescriptorSet(
     ctx->primaryDevice,
-    xmssMerkleSignBuffers,
-    XMSS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT,
-    ctx->xmssMerkleSignDescriptorSet
+    primarySigningBuffers,
+    PRIMARY_SIGNING_PIPELINE_DESCRIPTOR_COUNT,
+    ctx->primarySigningDescriptorSet
   );
 
-  VkBuffer wotsSignBuffers[WOTS_SIGN_PIPELINE_DESCRIPTOR_COUNT] = {
-    ctx->primaryInputsBufferDeviceLocal,
-    ctx->primaryHypertreeSignatureBufferDeviceLocal,
-    ctx->primaryXmssMessagesBuffer,
+  VkBuffer secondarySigningBuffers[SECONDARY_SIGNING_PIPELINE_DESCRIPTOR_COUNT] = {
+    ctx->secondaryInputsBufferDeviceLocal,
+    ctx->secondaryForsMessageBufferDeviceLocal,
+    ctx->secondaryForsNodesBuffer,
+    ctx->secondaryForsSignatureBufferDeviceLocal,
   };
   slhvkBindBuffersToDescriptorSet(
     ctx->primaryDevice,
-    wotsSignBuffers,
-    WOTS_SIGN_PIPELINE_DESCRIPTOR_COUNT,
-    ctx->wotsSignDescriptorSet
+    secondarySigningBuffers,
+    SECONDARY_SIGNING_PIPELINE_DESCRIPTOR_COUNT,
+    ctx->secondarySigningDescriptorSet
   );
 
-  /*******************  Bind secondary device buffers to descriptor sets  **********************/
-
-  VkBuffer forsLeavesGenBuffers[FORS_LEAVES_GEN_PIPELINE_DESCRIPTOR_COUNT] = {
-    ctx->secondaryInputsBufferDeviceLocal,
-    ctx->secondaryForsMessageBufferDeviceLocal,
-    ctx->secondaryForsNodesBuffer,
-    ctx->secondaryForsSignatureBufferDeviceLocal,
-  };
-  slhvkBindBuffersToDescriptorSet(
-    ctx->secondaryDevice,
-    forsLeavesGenBuffers,
-    FORS_LEAVES_GEN_PIPELINE_DESCRIPTOR_COUNT,
-    ctx->forsLeavesGenDescriptorSet
-  );
-
-  VkBuffer forsMerkleSignBuffers[FORS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT] = {
-    ctx->secondaryInputsBufferDeviceLocal,
-    ctx->secondaryForsMessageBufferDeviceLocal,
-    ctx->secondaryForsNodesBuffer,
-    ctx->secondaryForsSignatureBufferDeviceLocal,
-  };
-  slhvkBindBuffersToDescriptorSet(
-    ctx->secondaryDevice,
-    forsMerkleSignBuffers,
-    FORS_MERKLE_SIGN_PIPELINE_DESCRIPTOR_COUNT,
-    ctx->forsMerkleSignDescriptorSet
-  );
 
   /*******************  Build shader modules  **********************/
 
@@ -948,7 +799,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   };
 
   pipelineCreateInfo.stage.module = ctx->wotsTipsPrecomputeShader;
-  pipelineCreateInfo.layout       = ctx->wotsTipsPrecomputePipelineLayout;
+  pipelineCreateInfo.layout       = ctx->primarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
     VK_NULL_HANDLE, // pipeline cache, TODO
@@ -960,7 +811,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   pipelineCreateInfo.stage.module = ctx->xmssLeavesPrecomputeShader;
-  pipelineCreateInfo.layout       = ctx->xmssLeavesPrecomputePipelineLayout;
+  pipelineCreateInfo.layout       = ctx->primarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
     VK_NULL_HANDLE, // pipeline cache, TODO
@@ -972,7 +823,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   pipelineCreateInfo.stage.module = ctx->xmssMerkleSignShader;
-  pipelineCreateInfo.layout       = ctx->xmssMerkleSignPipelineLayout;
+  pipelineCreateInfo.layout       = ctx->primarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
     VK_NULL_HANDLE, // pipeline cache, TODO
@@ -984,7 +835,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   pipelineCreateInfo.stage.module = ctx->wotsSignShader;
-  pipelineCreateInfo.layout       = ctx->wotsSignPipelineLayout;
+  pipelineCreateInfo.layout       = ctx->primarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
     VK_NULL_HANDLE, // pipeline cache, TODO
@@ -1046,7 +897,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   pipelineCreateInfo.stage.module = ctx->forsLeavesGenShader;
-  pipelineCreateInfo.layout       = ctx->forsLeavesGenPipelineLayout;
+  pipelineCreateInfo.layout       = ctx->secondarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->secondaryDevice,
     VK_NULL_HANDLE, // pipeline cache, TODO
@@ -1058,7 +909,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   pipelineCreateInfo.stage.module = ctx->forsMerkleSignShader;
-  pipelineCreateInfo.layout       = ctx->forsMerkleSignPipelineLayout;
+  pipelineCreateInfo.layout       = ctx->secondarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->secondaryDevice,
     VK_NULL_HANDLE, // pipeline cache, TODO
@@ -1124,21 +975,22 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     );
   }
 
+  vkCmdBindDescriptorSets(
+    ctx->primaryHypertreePresignCommandBuffer,
+    VK_PIPELINE_BIND_POINT_COMPUTE,
+    ctx->primarySigningPipelineLayout,
+    0, // set number of first descriptor_set to be bound
+    1, // number of descriptor sets
+    &ctx->primarySigningDescriptorSet,
+    0,  // offset count
+    NULL // offsets array
+  );
+
   // Bind and dispatch the WOTS tips precompute shader.
   vkCmdBindPipeline(
     ctx->primaryHypertreePresignCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
     ctx->wotsTipsPrecomputePipeline
-  );
-  vkCmdBindDescriptorSets(
-    ctx->primaryHypertreePresignCommandBuffer,
-    VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx->wotsTipsPrecomputePipelineLayout,
-    0, // set number of first descriptor_set to be bound
-    1, // number of descriptor sets
-    &ctx->wotsTipsPrecomputeDescriptorSet,
-    0,  // offset count
-    NULL // offsets array
   );
   vkCmdDispatch(
     ctx->primaryHypertreePresignCommandBuffer,
@@ -1170,16 +1022,6 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     VK_PIPELINE_BIND_POINT_COMPUTE,
     ctx->xmssLeavesPrecomputePipeline
   );
-  vkCmdBindDescriptorSets(
-    ctx->primaryHypertreePresignCommandBuffer,
-    VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx->xmssLeavesPrecomputePipelineLayout,
-    0, // set number of first descriptor_set to be bound
-    1, // number of descriptor sets
-    &ctx->xmssLeavesPrecomputeDescriptorSet,
-    0,  // offset count
-    NULL // offsets array
-  );
   vkCmdDispatch(
     ctx->primaryHypertreePresignCommandBuffer,
     slhvkNumWorkGroups(SLHVK_HYPERTREE_LAYERS * SLHVK_XMSS_LEAVES),
@@ -1210,16 +1052,6 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     ctx->primaryHypertreePresignCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
     ctx->xmssMerkleSignPipeline
-  );
-  vkCmdBindDescriptorSets(
-    ctx->primaryHypertreePresignCommandBuffer,
-    VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx->xmssMerkleSignPipelineLayout,
-    0, // set number of first descriptor_set to be bound
-    1, // number of descriptor sets
-    &ctx->xmssMerkleSignDescriptorSet,
-    0,  // offset count
-    NULL // offsets array
   );
   vkCmdDispatch(
     ctx->primaryHypertreePresignCommandBuffer,
@@ -1267,21 +1099,22 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     );
   }
 
+  vkCmdBindDescriptorSets(
+    ctx->secondaryForsCommandBuffer,
+    VK_PIPELINE_BIND_POINT_COMPUTE,
+    ctx->secondarySigningPipelineLayout,
+    0, // set number of first descriptor_set to be bound
+    1, // number of descriptor sets
+    &ctx->secondarySigningDescriptorSet,
+    0,  // offset count
+    NULL // offsets array
+  );
+
   // Bind and dispatch the FORS leaves gen shader.
   vkCmdBindPipeline(
     ctx->secondaryForsCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
     ctx->forsLeavesGenPipeline
-  );
-  vkCmdBindDescriptorSets(
-    ctx->secondaryForsCommandBuffer,
-    VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx->forsLeavesGenPipelineLayout,
-    0, // set number of first descriptor_set to be bound
-    1, // number of descriptor sets
-    &ctx->forsLeavesGenDescriptorSet,
-    0,  // offset count
-    NULL // offsets array
   );
   vkCmdDispatch(
     ctx->secondaryForsCommandBuffer,
@@ -1312,16 +1145,6 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     ctx->secondaryForsCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
     ctx->forsMerkleSignPipeline
-  );
-  vkCmdBindDescriptorSets(
-    ctx->secondaryForsCommandBuffer,
-    VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx->forsMerkleSignPipelineLayout,
-    0, // set number of first descriptor_set to be bound
-    1, // number of descriptor sets
-    &ctx->forsMerkleSignDescriptorSet,
-    0,  // offset count
-    NULL // offsets array
   );
   vkCmdDispatch(
     ctx->secondaryForsCommandBuffer,
@@ -1391,21 +1214,22 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     &regions
   );
 
+  vkCmdBindDescriptorSets(
+    ctx->primaryHypertreeFinishCommandBuffer,
+    VK_PIPELINE_BIND_POINT_COMPUTE,
+    ctx->primarySigningPipelineLayout,
+    0, // set number of first descriptor_set to be bound
+    1, // number of descriptor sets
+    &ctx->primarySigningDescriptorSet,
+    0,  // offset count
+    NULL // offsets array
+  );
+
   // Bind and dispatch the final WOTS signing shader.
   vkCmdBindPipeline(
     ctx->primaryHypertreeFinishCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
     ctx->wotsSignPipeline
-  );
-  vkCmdBindDescriptorSets(
-    ctx->primaryHypertreeFinishCommandBuffer,
-    VK_PIPELINE_BIND_POINT_COMPUTE,
-    ctx->wotsSignPipelineLayout,
-    0, // set number of first descriptor_set to be bound
-    1, // number of descriptor sets
-    &ctx->wotsSignDescriptorSet,
-    0,  // offset count
-    NULL // offsets array
   );
   vkCmdDispatch(
     ctx->primaryHypertreeFinishCommandBuffer,
