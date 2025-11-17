@@ -73,14 +73,16 @@ $(TEST_VENDOR_OBJ):
 $(TEST_RUNNER): $(TEST_RUNNER_SRC) $(TEST_HDR)
 	$(CC) $(CFLAGS) -o $@ $<
 
-.PHONY: test
+.PHONY:
 test: unit bench
 
-.PHONY: unit
+.PHONY:
+.NOTPARALLEL:
 unit: $(TEST_RUNNER) $(UNIT_TEST_BIN) $(TEST_VEC_DIR)
 	./$(TEST_RUNNER) tests/bin/unit
 
-.PHONY: bench
+.PHONY:
+.NOTPARALLEL:
 bench: $(TEST_RUNNER) $(BENCH_TEST_BIN)
 	./$(TEST_RUNNER) tests/bin/bench
 
@@ -90,6 +92,6 @@ $(TEST_VEC_DIR):
 BUILD_OUTPUTS := $(OBJ) $(TEST_VENDOR_OBJ) lib $(SHADER_DIR)/*.h $(SHADER_DIR)/*.spv \
                  tests/bin/*/*.test $(TEST_RUNNER)
 
-.PHONY: clean
+.PHONY:
 clean:
 	rm -rf $(BUILD_OUTPUTS)
