@@ -16,14 +16,31 @@ def is_supported_params(parameter_set):
   return parameter_set.endswith('SHA2-128s')
 
 def download_test_vector(url, fname):
-  print('Downloading test vectors from %s ...' % url, end='')
+  print('Downloading test vectors from %s ...' % url)
   sys.stdout.flush()
+
+  old_etag = ""
+  try:
+    with open(fname + '.etag') as fh:
+      old_etag = fh.read()
+  except:
+    pass
+
   with urlopen(url) as resp:
-    resp_data = json.loads(resp.read())
-    test_groups = [t for t in resp_data['testGroups'] if is_supported_params(t['parameterSet'])]
-    with open(fname, 'w') as fh:
-      json.dump(test_groups, fh)
-  print(" done")
+    new_etag = resp.headers.get('etag')
+    if new_etag is None:
+      new_etag = ""
+
+    # Only download if file is changed
+    if old_etag == "" or new_etag != old_etag:
+      resp_data = json.loads(resp.read())
+      test_groups = [t for t in resp_data['testGroups'] if is_supported_params(t['parameterSet'])]
+      with open(fname, 'w') as fh:
+        json.dump(test_groups, fh)
+      with open(fname + '.etag', 'w') as fh:
+          fh.write(new_etag)
+
+  print('test vectors saved to %s' % fname)
 
 if __name__ == "__main__":
   pathlib.Path("tests/vectors").mkdir(parents=True, exist_ok=True)
