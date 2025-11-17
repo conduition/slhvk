@@ -1997,8 +1997,8 @@ cleanup:
 int slhvkKeygen(
   SlhvkContext ctx,
   uint32_t keysCount,
-  uint8_t** skSeeds,
-  uint8_t** pkSeeds,
+  uint8_t* const* skSeeds,
+  uint8_t* const* pkSeeds,
   uint8_t** pkRootsOut
 ) {
   int err = 0;
@@ -2393,13 +2393,13 @@ typedef struct SlhvkSignatureVerifyRequest {
 int slhvkVerifyPure(
   SlhvkContext ctx,
   uint32_t signaturesLen,
-  uint8_t** contextStrings,
-  uint8_t* contextStringSizes,
-  uint8_t** pkSeeds,
-  uint8_t** pkRoots,
-  uint8_t** signatures,
-  uint8_t** messages,
-  size_t* messageSizes,
+  uint8_t* const* contextStrings,
+  uint8_t const* contextStringSizes,
+  uint8_t* const* pkSeeds,
+  uint8_t* const* pkRoots,
+  uint8_t* const* signatures,
+  uint8_t* const* messages,
+  size_t const* messageSizes,
   int* verifyResultsOut
 ) {
   int err = 0;
