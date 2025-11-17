@@ -95,7 +95,7 @@ typedef struct KeygenTestCase {
 } KeygenTestCase;
 
 int readKeygenTestVectors(KeygenTestCase** testCasesOutPtr, int* testCasesCountPtr) {
-  char* keygenJsonRaw = readTextFile("../vectors/keygen.json");
+  char* keygenJsonRaw = readTextFile("../../vectors/keygen.json");
   if (keygenJsonRaw == NULL) {
     return ERROR_FILE_READ;
   }
@@ -201,7 +201,7 @@ void freeSigningTestCase(SigningTestCase* testCase) {
 }
 
 int readSigningTestVectors(SigningTestCase** testCasesOutPtr, int* testCasesCountPtr) {
-  char* signingJsonRaw = readTextFile("../vectors/signing.json");
+  char* signingJsonRaw = readTextFile("../../vectors/signing.json");
   if (signingJsonRaw == NULL) {
     return ERROR_FILE_READ;
   }
@@ -324,7 +324,7 @@ void freeVerifyTestCase(VerifyTestCase* testCase) {
 }
 
 int readVerifyTestVectors(VerifyTestCase** testCasesOutPtr, int* testCasesCountPtr) {
-  char* verifyingJsonRaw = readTextFile("../vectors/verifying.json");
+  char* verifyingJsonRaw = readTextFile("../../vectors/verifying.json");
   if (verifyingJsonRaw == NULL) {
     return ERROR_FILE_READ;
   }

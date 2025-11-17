@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../utils.h"
+#include "../../utils.h"
 #include "slhvk.h"
 
 int main() {

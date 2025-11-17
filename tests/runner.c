@@ -40,63 +40,80 @@ int run_test(const char* executable, int* exit_status) {
   return 0;
 }
 
-
-int main() {
-  int error = chdir("tests/bin");
-  if (error) {
-    perror("could not chdir to tests/bin");
-    return error;
-  }
-
-  DIR* dir = opendir(".");
-  if (dir == NULL) {
-    perror("failed to open cwd:");
+int main(int argc, const char* argv[]) {
+  if (argc < 2) {
+    eprintf("No test folder specified\n");
+    eprintf("Usage: %s <test_folder> [<test_folder>...]\n", argv[0]);
     return -1;
   }
 
-  struct dirent* ent;
-  printf("\n");
-  while ((ent = readdir(dir)) != NULL) {
-    char* suffix = strrchr(ent->d_name, '.');
-    if (suffix != NULL && strcmp(suffix, ".test") == 0) {
-      printf("RUN " ANSI_COLOR_MAGENTA "%s" ANSI_COLOR_RESET "\n", ent->d_name);
+  char oldWorkingDir[4096];
+  getcwd(oldWorkingDir, sizeof(oldWorkingDir));
 
-      int test_status;
-      int run_status = run_test(ent->d_name, &test_status);
+  for (int i = 1; i < argc; i++) {
+    int error = chdir(argv[i]);
+    if (error) {
+      perror("could not chdir into tests folder");
+      return error;
+    }
 
-      printf(ANSI_COLOR_RESET "  ");
+    DIR* dir = opendir(".");
+    if (dir == NULL) {
+      perror("failed to open cwd:");
+      return -1;
+    }
 
-      if (run_status) {
-        printf(ANSI_COLOR_RED "FAILED: cannot run test (%d)\n" ANSI_COLOR_RESET, test_status);
-        error = run_status;
-        continue;
-      }
-      if (WIFEXITED(test_status)) {
-        int exit_code = WEXITSTATUS(test_status);
-        if (exit_code == 0) {
-          printf(ANSI_COLOR_GREEN "OK\n" ANSI_COLOR_RESET);
-        } else {
-          printf(ANSI_COLOR_RED "FAILED: test exited with code %d\n" ANSI_COLOR_RESET, exit_code);
-          error = exit_code;
+    struct dirent* ent;
+    printf("\n");
+    while ((ent = readdir(dir)) != NULL) {
+      char* suffix = strrchr(ent->d_name, '.');
+      if (suffix != NULL && strcmp(suffix, ".test") == 0) {
+        printf("RUN " ANSI_COLOR_MAGENTA "%s" ANSI_COLOR_RESET "\n", ent->d_name);
+
+        int test_status;
+        int run_status = run_test(ent->d_name, &test_status);
+
+        printf(ANSI_COLOR_RESET "  ");
+
+        if (run_status) {
+          printf(ANSI_COLOR_RED "FAILED: cannot run test (%d)\n" ANSI_COLOR_RESET, test_status);
+          error = run_status;
+          continue;
         }
-      } else if (WIFSIGNALED(test_status)) {
-        int sig = WTERMSIG(test_status);
-        char* sig_text = strsignal(sig);
-        printf(ANSI_COLOR_RED "FAILED: test terminated: ");
-        if (sig_text != NULL) {
-          printf("%s", sig_text);
+        if (WIFEXITED(test_status)) {
+          int exit_code = WEXITSTATUS(test_status);
+          if (exit_code == 0) {
+            printf(ANSI_COLOR_GREEN "OK\n" ANSI_COLOR_RESET);
+          } else {
+            printf(ANSI_COLOR_RED "FAILED: test exited with code %d\n" ANSI_COLOR_RESET, exit_code);
+            error = exit_code;
+          }
+        } else if (WIFSIGNALED(test_status)) {
+          int sig = WTERMSIG(test_status);
+          char* sig_text = strsignal(sig);
+          printf(ANSI_COLOR_RED "FAILED: test terminated: ");
+          if (sig_text != NULL) {
+            printf("%s", sig_text);
+          } else {
+            printf("signal %d", sig);
+          }
+          printf("%s\n", ANSI_COLOR_RESET);
+          error = -4;
         } else {
-          printf("signal %d", sig);
+          error = -5;
         }
-        printf("%s\n", ANSI_COLOR_RESET);
-        error = -4;
-      } else {
-        error = -5;
+        printf("\n");
       }
-      printf("\n");
+    }
+    closedir(dir);
+    if (error) return error;
+
+    error = chdir(oldWorkingDir);
+    if (error) {
+      perror("could not chdir back to old directory");
+      return error;
     }
   }
-  closedir(dir);
 
-  return error;
+  return 0;
 }

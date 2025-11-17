@@ -50,8 +50,10 @@ $(SHADER_HDR):
 
 TEST_RUNNER     := tests/runner
 TEST_RUNNER_SRC := $(TEST_RUNNER).c
-TEST_SRC        := $(wildcard tests/bin/*.c)
-TEST_BIN        := $(TEST_SRC:.c=.test)
+UNIT_TEST_SRC   := $(wildcard tests/bin/unit/*.c)
+UNIT_TEST_BIN   := $(UNIT_TEST_SRC:.c=.test)
+BENCH_TEST_SRC  := $(wildcard tests/bin/bench/*.c)
+BENCH_TEST_BIN  := $(BENCH_TEST_SRC:.c=.test)
 TEST_VENDOR_SRC := tests/vendor/cJSON.c
 TEST_VENDOR_OBJ := $(TEST_VENDOR_SRC:.c=.o)
 TEST_HDR        := tests/utils.h tests/acvp.h
@@ -62,7 +64,8 @@ TEST_VEC_DIR    := tests/vectors
 	$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_VENDOR_OBJ) -lslhvk -lvulkan
 
 # Build test binaries
-$(TEST_BIN):
+$(UNIT_TEST_BIN):
+$(BENCH_TEST_BIN):
 
 # build vendor objects (and don't delete them)
 $(TEST_VENDOR_OBJ):
@@ -71,12 +74,22 @@ $(TEST_RUNNER): $(TEST_RUNNER_SRC) $(TEST_HDR)
 	$(CC) $(CFLAGS) -o $@ $<
 
 .PHONY: test
-test: $(TEST_RUNNER) $(TEST_BIN) $(TEST_VEC_DIR)
-	./$(TEST_RUNNER)
+test: unit bench
+
+.PHONY: unit
+unit: $(TEST_RUNNER) $(UNIT_TEST_BIN) $(TEST_VEC_DIR)
+	./$(TEST_RUNNER) tests/bin/unit
+
+.PHONY: bench
+bench: $(TEST_RUNNER) $(BENCH_TEST_BIN)
+	./$(TEST_RUNNER) tests/bin/bench
 
 $(TEST_VEC_DIR):
 	./download_test_vectors.py
 
+BUILD_OUTPUTS := $(OBJ) $(TEST_VENDOR_OBJ) lib $(SHADER_DIR)/*.h $(SHADER_DIR)/*.spv \
+                 tests/bin/*/*.test $(TEST_RUNNER)
+
 .PHONY: clean
 clean:
-	rm -rf $(OBJ) lib $(SHADER_DIR)/*.h $(SHADER_DIR)/*.spv tests/bin/*.test $(TEST_RUNNER) $(TEST_VEC_DIR)
+	rm -rf $(BUILD_OUTPUTS)

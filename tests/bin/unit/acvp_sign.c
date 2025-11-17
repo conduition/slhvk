@@ -3,8 +3,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../utils.h"
-#include "../acvp.h"
+#include "../../utils.h"
+#include "../../acvp.h"
 #include "slhvk.h"
 
 void eprintHex(const uint8_t* data, size_t len) {
