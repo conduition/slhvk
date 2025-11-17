@@ -1,4 +1,6 @@
 #include <string.h>
+#include <stdbool.h>
+
 #include "vendor/cJSON.h"
 #include "slhvk.h"
 
@@ -295,6 +297,142 @@ cleanup:
   cJSON_Delete(signingJson);
   for (int i = 0; i < testCasesAllocated; i++) {
     freeSigningTestCase(&testCases[i]);
+  }
+  free(testCases);
+  return err;
+}
+
+
+typedef struct VerifyTestCase {
+  int id;
+  bool testPassed;
+  uint8_t skSeed[SLHVK_N];
+  uint8_t skPrf[SLHVK_N];
+  uint8_t pkSeed[SLHVK_N];
+  uint8_t pkRoot[SLHVK_N];
+  uint8_t signature[SLHVK_SIGNATURE_SIZE];
+  uint8_t addrnd[SLHVK_N];
+  uint8_t* contextString;
+  size_t contextStringSize;
+  uint8_t* message;
+  size_t messageSize;
+} VerifyTestCase;
+
+void freeVerifyTestCase(VerifyTestCase* testCase) {
+  free(testCase->contextString);
+  free(testCase->message);
+}
+
+int readVerifyTestVectors(VerifyTestCase** testCasesOutPtr, int* testCasesCountPtr) {
+  char* verifyingJsonRaw = readTextFile("../vectors/verifying.json");
+  if (verifyingJsonRaw == NULL) {
+    return ERROR_FILE_READ;
+  }
+
+  cJSON* verifyingJson = cJSON_Parse(verifyingJsonRaw);
+  free(verifyingJsonRaw);
+  if (verifyingJson == NULL) {
+    return ERROR_INVALID_JSON;
+  }
+
+  int err = 0;
+  VerifyTestCase* testCases = NULL;
+  int testCasesAllocated = 0;
+
+  cJSON* testGroupJson = NULL;
+  cJSON* group;
+  cJSON_ArrayForEach(group, verifyingJson) {
+    char* parameterSet = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(group, "parameterSet"));
+    if (parameterSet == NULL) {
+      err = ERROR_INVALID_JSON;
+      goto cleanup;
+    }
+    if (strcmp(parameterSet, "SLH-DSA-SHA2-128s") == 0) {
+      testGroupJson = group;
+      break;
+    }
+  }
+  if (testGroupJson == NULL) {
+    err = ERROR_CANNOT_FIND_PARAMETER_SET_TESTS;
+    goto cleanup;
+  }
+
+  cJSON* testCasesJson = cJSON_GetObjectItemCaseSensitive(testGroupJson, "tests");
+  if (!cJSON_IsArray(testCasesJson)) {
+    err = ERROR_INVALID_JSON;
+    goto cleanup;
+  }
+
+  int testCasesCount = cJSON_GetArraySize(testCasesJson);
+  testCases = malloc(sizeof(VerifyTestCase) * testCasesCount);
+
+  cJSON* testCaseJson;
+  int i = 0;
+  cJSON_ArrayForEach(testCaseJson, testCasesJson) {
+    char* seckeyHex = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(testCaseJson, "sk"));
+    char* messageHex = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(testCaseJson, "message"));
+    char* contextStringHex = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(testCaseJson, "context"));
+    char* addrndHex = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(testCaseJson, "additionalRandomness"));
+    char* signatureHex = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(testCaseJson, "signature"));
+    bool testPassed = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(testCaseJson, "testPassed"));
+    int testCaseID = (int) cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(testCaseJson, "tcId"));
+
+    if (seckeyHex == NULL || messageHex == NULL || contextStringHex == NULL || signatureHex == NULL || addrndHex == NULL) {
+      err = ERROR_INVALID_JSON;
+      goto cleanup;
+    }
+
+    testCases[i].id = testCaseID;
+    testCases[i].testPassed = testPassed;
+
+    // Extract test case data from the seckey
+    uint8_t seckey[SLHVK_N * 4];
+    err = hexDecode(seckeyHex, seckey, sizeof(seckey));
+    if (err) goto cleanup;
+    memcpy(testCases[i].skSeed, &seckey[0], SLHVK_N);
+    memcpy(testCases[i].skPrf, &seckey[SLHVK_N], SLHVK_N);
+    memcpy(testCases[i].pkSeed, &seckey[SLHVK_N * 2], SLHVK_N);
+    memcpy(testCases[i].pkRoot, &seckey[SLHVK_N * 3], SLHVK_N);
+
+    // Copy the signature, but only if it is a valid size
+    if (strlen(signatureHex) == SLHVK_SIGNATURE_SIZE * 2) {
+      err = hexDecode(signatureHex, testCases[i].signature, SLHVK_SIGNATURE_SIZE);
+      if (err) goto cleanup;
+    } else if (testPassed) {
+      return ERROR_INVALID_HEX_DATA;
+    } else {
+      // force the test to fail as expected.
+      memset(testCases[i].signature, 0, SLHVK_SIGNATURE_SIZE);
+    }
+
+    // Copy the addrnd
+    err = hexDecode(addrndHex, testCases[i].addrnd, SLHVK_N);
+    if (err) goto cleanup;
+
+    testCases[i].messageSize = strlen(messageHex) / 2;
+    testCases[i].contextStringSize = strlen(contextStringHex) / 2;
+    testCases[i].message = malloc(testCases[i].messageSize);
+    testCases[i].contextString = malloc(testCases[i].contextStringSize);
+    testCasesAllocated += 1;
+
+    err = hexDecode(messageHex, testCases[i].message, testCases[i].messageSize);
+    if (err) goto cleanup;
+
+    err = hexDecode(contextStringHex, testCases[i].contextString, testCases[i].contextStringSize);
+    if (err) goto cleanup;
+
+    i += 1;
+  }
+
+  cJSON_Delete(verifyingJson);
+  *testCasesOutPtr = testCases;
+  *testCasesCountPtr = testCasesCount;
+  return 0;
+
+cleanup:
+  cJSON_Delete(verifyingJson);
+  for (int i = 0; i < testCasesAllocated; i++) {
+    freeVerifyTestCase(&testCases[i]);
   }
   free(testCases);
   return err;

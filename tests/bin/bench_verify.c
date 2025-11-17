@@ -21,9 +21,9 @@ int main() {
   uint8_t pkRoot[SLHVK_N] = {0x8f, 0x0c, 0x8e, 0xe4, 0xaf, 0xdf, 0xc4, 0x64,
                              0x61, 0x75, 0xc8, 0x35, 0x1e, 0x17, 0x6a, 0x2f};
 
-  const uint8_t message[] = "hello world";
-  const uint8_t contextString[] = "string";
-  const uint8_t addrnd[] = {5, 4, 3, 2, 1, 0, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+  uint8_t message[] = "hello world";
+  uint8_t contextString[] = "string";
+  uint8_t addrnd[] = {5, 4, 3, 2, 1, 0, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
 
   uint8_t slhDsaSignature[SLHVK_SIGNATURE_SIZE];
 
@@ -46,15 +46,19 @@ int main() {
   }
 
   #define SIGS_LEN 2048
-  const uint8_t* pkSeeds[SIGS_LEN];
-  const uint8_t* pkRoots[SIGS_LEN];
-  const uint8_t* signatures[SIGS_LEN];
-  const uint8_t* messages[SIGS_LEN];
+  uint8_t* pkSeeds[SIGS_LEN];
+  uint8_t* pkRoots[SIGS_LEN];
+  uint8_t* signatures[SIGS_LEN];
+  uint8_t* messages[SIGS_LEN];
   size_t messageSizes[SIGS_LEN];
+  uint8_t* contextStrings[SIGS_LEN];
+  uint8_t contextStringSizes[SIGS_LEN];
   for (int i = 0; i < SIGS_LEN; i++) {
     pkSeeds[i] = pkSeed;
     pkRoots[i] = pkRoot;
     signatures[i] = slhDsaSignature;
+    contextStrings[i] = contextString;
+    contextStringSizes[i] = sizeof(contextString) - 1;
     messages[i] = message;
     messageSizes[i] = sizeof(message) - 1;
   }
@@ -68,8 +72,8 @@ int main() {
     err = slhvkVerifyPure(
       ctx,
       SIGS_LEN, // sigs len
-      contextString,
-      sizeof(contextString) - 1,
+      contextStrings,
+      contextStringSizes,
       pkSeeds,
       pkRoots,
       signatures,

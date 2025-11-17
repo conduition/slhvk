@@ -95,12 +95,12 @@ int slhvkKeygen(
 int slhvkVerifyPure(
   SlhvkContext ctx,
   uint32_t signaturesLen,
-  const uint8_t* contextString,
-  uint8_t contextStringSize,
-  const uint8_t* const* pkSeeds,
-  const uint8_t* const* pkRoots,
-  const uint8_t* const* signatures,
-  const uint8_t* const* messages,
-  const size_t* messageSizes,
+  uint8_t** contextStrings,
+  uint8_t* contextStringSizes,
+  uint8_t** pkSeeds,
+  uint8_t** pkRoots,
+  uint8_t** signatures,
+  uint8_t** messages,
+  size_t* messageSizes,
   int* verifyResultsOut
 );
