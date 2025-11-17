@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-extern const uint32_t SHA256_INITIAL_STATE[8];
+extern const uint32_t SLHVK_SHA256_INITIAL_STATE[8];
 
 #define SHA256_INITIAL_STATE_DEF { \
   0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, \
@@ -14,8 +14,8 @@ typedef struct ShaContext {
   size_t   ctr;
 } ShaContext;
 
-void sha256_init(ShaContext* ctx);
-void sha256_clone(ShaContext* ctx_dest, const ShaContext* ctx_src);
-void sha256_compress(uint32_t state[8], const uint8_t block[64]);
-void sha256_update(ShaContext* ctx, const uint8_t* data, size_t data_len);
-void sha256_finalize(ShaContext* ctx, uint8_t* output, size_t output_len);
+void slhvkSha256Init(ShaContext* ctx);
+void slhvkSha256Clone(ShaContext* ctx_dest, const ShaContext* ctx_src);
+void slhvkSha256Compress(uint32_t state[8], const uint8_t block[64]);
+void slhvkSha256Update(ShaContext* ctx, const uint8_t* data, size_t data_len);
+void slhvkSha256Finalize(ShaContext* ctx, uint8_t* output, size_t output_len);

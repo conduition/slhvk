@@ -337,9 +337,9 @@ int slhvkKeygen(
     uint8_t block[64] = {0};
     uint32_t sha256State[8];
     for (uint32_t i = 0; i < keysChunkCount && keysGenerated + i < keysCount; i++) {
-      memcpy(sha256State, SHA256_INITIAL_STATE, sizeof(sha256State));
+      memcpy(sha256State, SLHVK_SHA256_INITIAL_STATE, sizeof(sha256State));
       memcpy(block, pkSeeds[keysGenerated + i], N);
-      sha256_compress(sha256State, block);
+      slhvkSha256Compress(sha256State, block);
 
       uint32_t offset = i * 8;
       for (uint32_t j = 0; j < 8; j++) {

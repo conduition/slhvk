@@ -44,7 +44,7 @@ void slhvkHashForsRootsToWotsMessage(
   uint32_t wotsMessage[SLHVK_WOTS_CHAIN_COUNT]
 ) {
   ShaContext shaCtx;
-  sha256_clone(&shaCtx, shaCtxInitial);
+  slhvkSha256Clone(&shaCtx, shaCtxInitial);
 
   uint8_t adrsCompressed[22] = {0};
 
@@ -62,11 +62,11 @@ void slhvkHashForsRootsToWotsMessage(
     keypairAddress >>= 8;
   }
 
-  sha256_update(&shaCtx, adrsCompressed, 22);
-  sha256_update(&shaCtx, forsRoots, SLHVK_N * SLHVK_FORS_TREE_COUNT);
+  slhvkSha256Update(&shaCtx, adrsCompressed, 22);
+  slhvkSha256Update(&shaCtx, forsRoots, SLHVK_N * SLHVK_FORS_TREE_COUNT);
 
   uint8_t forsPubkey[SLHVK_N];
-  sha256_finalize(&shaCtx, forsPubkey, SLHVK_N);
+  slhvkSha256Finalize(&shaCtx, forsPubkey, SLHVK_N);
   hashToBaseW(forsPubkey, wotsMessage);
 }
 
@@ -91,23 +91,23 @@ void slhvkMessagePrf(
   }
 
   ShaContext hmacHashState;
-  sha256_init(&hmacHashState);
-  sha256_update(&hmacHashState, innerK, sizeof(innerK));
-  sha256_update(&hmacHashState, optRand, SLHVK_N);
+  slhvkSha256Init(&hmacHashState);
+  slhvkSha256Update(&hmacHashState, innerK, sizeof(innerK));
+  slhvkSha256Update(&hmacHashState, optRand, SLHVK_N);
   if (contextString != NULL) {
     uint8_t contextStringHeader[2] = { 0, contextStringSize };
-    sha256_update(&hmacHashState, contextStringHeader, sizeof(contextStringHeader));
-    sha256_update(&hmacHashState, contextString, contextStringSize);
+    slhvkSha256Update(&hmacHashState, contextStringHeader, sizeof(contextStringHeader));
+    slhvkSha256Update(&hmacHashState, contextString, contextStringSize);
   }
-  sha256_update(&hmacHashState, rawMessage, rawMessageSize);
+  slhvkSha256Update(&hmacHashState, rawMessage, rawMessageSize);
 
   uint8_t hmacInnerHash[32];
-  sha256_finalize(&hmacHashState, hmacInnerHash, sizeof(hmacInnerHash));
+  slhvkSha256Finalize(&hmacHashState, hmacInnerHash, sizeof(hmacInnerHash));
 
-  sha256_init(&hmacHashState);
-  sha256_update(&hmacHashState, outerK, sizeof(outerK));
-  sha256_update(&hmacHashState, hmacInnerHash, sizeof(hmacInnerHash));
-  sha256_finalize(&hmacHashState, randomizer, SLHVK_N);
+  slhvkSha256Init(&hmacHashState);
+  slhvkSha256Update(&hmacHashState, outerK, sizeof(outerK));
+  slhvkSha256Update(&hmacHashState, hmacInnerHash, sizeof(hmacInnerHash));
+  slhvkSha256Finalize(&hmacHashState, randomizer, SLHVK_N);
 }
 
 void slhvkDigestAndSplitMsg(
@@ -123,38 +123,38 @@ void slhvkDigestAndSplitMsg(
   uint32_t* signingKeypairAddressPtr
 ) {
   ShaContext shaCtx;
-  sha256_init(&shaCtx);
-  sha256_update(&shaCtx, randomizer, SLHVK_N);
-  sha256_update(&shaCtx, pkSeed, SLHVK_N);
+  slhvkSha256Init(&shaCtx);
+  slhvkSha256Update(&shaCtx, randomizer, SLHVK_N);
+  slhvkSha256Update(&shaCtx, pkSeed, SLHVK_N);
 
   ShaContext shaCtxInner;
-  sha256_clone(&shaCtxInner, &shaCtx);
-  sha256_update(&shaCtxInner, pkRoot, SLHVK_N);
+  slhvkSha256Clone(&shaCtxInner, &shaCtx);
+  slhvkSha256Update(&shaCtxInner, pkRoot, SLHVK_N);
   if (contextString != NULL) {
     uint8_t contextStringHeader[2] = { 0, contextStringSize };
-    sha256_update(&shaCtxInner, contextStringHeader, sizeof(contextStringHeader));
-    sha256_update(&shaCtxInner, contextString, contextStringSize);
+    slhvkSha256Update(&shaCtxInner, contextStringHeader, sizeof(contextStringHeader));
+    slhvkSha256Update(&shaCtxInner, contextString, contextStringSize);
   }
-  sha256_update(&shaCtxInner, rawMessage, rawMessageSize);
+  slhvkSha256Update(&shaCtxInner, rawMessage, rawMessageSize);
   uint8_t digestInner[32];
-  sha256_finalize(&shaCtxInner, digestInner, sizeof(digestInner));
+  slhvkSha256Finalize(&shaCtxInner, digestInner, sizeof(digestInner));
 
-  sha256_update(&shaCtx, digestInner, sizeof(digestInner));
+  slhvkSha256Update(&shaCtx, digestInner, sizeof(digestInner));
 
   uint8_t fullMessageDigest[SLHVK_MESSAGE_DIGEST_SIZE];
   uint8_t mgfCounter[4] = {0, 0, 0, 0};
 
   #if SLHVK_MESSAGE_DIGEST_SIZE <= 32
-    sha256_update(&shaCtx, mgfCounter, 4);
-    sha256_finalize(&shaCtx, fullMessageDigest, SLHVK_MESSAGE_DIGEST_SIZE);
+    slhvkSha256Update(&shaCtx, mgfCounter, 4);
+    slhvkSha256Finalize(&shaCtx, fullMessageDigest, SLHVK_MESSAGE_DIGEST_SIZE);
   #elif SLHVK_MESSAGE_DIGEST_SIZE <= 64
-    sha256_clone(&shaCtxInner, &shaCtx);
-    sha256_update(&shaCtxInner, mgfCounter, 4);
-    sha256_finalize(&shaCtxInner, fullMessageDigest, SLHVK_MESSAGE_DIGEST_SIZE);
+    slhvkSha256Clone(&shaCtxInner, &shaCtx);
+    slhvkSha256Update(&shaCtxInner, mgfCounter, 4);
+    slhvkSha256Finalize(&shaCtxInner, fullMessageDigest, SLHVK_MESSAGE_DIGEST_SIZE);
 
     mgfCounter[3] += 1;
-    sha256_update(&shaCtx, mgfCounter, 4);
-    sha256_finalize(&shaCtx, &fullMessageDigest[32], SLHVK_MESSAGE_DIGEST_SIZE - 32);
+    slhvkSha256Update(&shaCtx, mgfCounter, 4);
+    slhvkSha256Finalize(&shaCtx, &fullMessageDigest[32], SLHVK_MESSAGE_DIGEST_SIZE - 32);
   #else
     #error "Unexpected message hash length, should be SLHVK_MESSAGE_DIGEST_SIZE <= 64"
   #endif

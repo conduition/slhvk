@@ -9,8 +9,8 @@
 static void prepstate(ShaContext* shaCtx, const uint8_t pkSeed[N]) {
   uint8_t block[64] = {0};
   memcpy(block, pkSeed, N);
-  sha256_init(shaCtx);
-  sha256_update(shaCtx, block, 64);
+  slhvkSha256Init(shaCtx);
+  slhvkSha256Update(shaCtx, block, 64);
 }
 
 int slhvkSignPure(

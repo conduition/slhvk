@@ -4,7 +4,7 @@
 
 #define MIN(x, y) (x < y ? x : y)
 
-const uint32_t SHA256_INITIAL_STATE[8] = SHA256_INITIAL_STATE_DEF;
+const uint32_t SLHVK_SHA256_INITIAL_STATE[8] = SHA256_INITIAL_STATE_DEF;
 
 static const uint32_t K[] = {
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
@@ -70,7 +70,7 @@ static inline void store_u32(uint8_t *x, uint32_t v) {
   x[0] = (uint8_t) v;
 }
 
-void sha256_compress(uint32_t state[8], const uint8_t block[64]) {
+void slhvkSha256Compress(uint32_t state[8], const uint8_t block[64]) {
   uint32_t schedule[64] = {0};
 
   for (int i = 0; i < 16; i++) {
@@ -109,25 +109,25 @@ void sha256_compress(uint32_t state[8], const uint8_t block[64]) {
   }
 }
 
-void sha256_init(ShaContext* ctx) {
-  memcpy(ctx->state, SHA256_INITIAL_STATE, 32);
+void slhvkSha256Init(ShaContext* ctx) {
+  memcpy(ctx->state, SLHVK_SHA256_INITIAL_STATE, 32);
   memset(ctx->block, 0, 64);
   ctx->ctr = 0;
 }
 
-void sha256_clone(ShaContext* ctx_dest, const ShaContext* ctx_src) {
+void slhvkSha256Clone(ShaContext* ctx_dest, const ShaContext* ctx_src) {
   memcpy(ctx_dest->state, ctx_src->state, 32);
   memcpy(ctx_dest->block, ctx_src->block, 64);
   ctx_dest->ctr = ctx_src->ctr;
 }
 
-void sha256_update(ShaContext* ctx, const uint8_t* data, size_t data_len) {
+void slhvkSha256Update(ShaContext* ctx, const uint8_t* data, size_t data_len) {
   size_t start = ctx->ctr % 64;
   size_t remaining = data_len;
   while (start + remaining >= 64) {
     size_t count = 64 - start;
     memcpy(&ctx->block[start], &data[data_len - remaining], count);
-    sha256_compress(ctx->state, ctx->block);
+    slhvkSha256Compress(ctx->state, ctx->block);
     ctx->ctr += count;
     remaining -= count;
     start = ctx->ctr % 64;
@@ -137,20 +137,20 @@ void sha256_update(ShaContext* ctx, const uint8_t* data, size_t data_len) {
   ctx->ctr += remaining;
 }
 
-void sha256_finalize(ShaContext* ctx, uint8_t* output, size_t output_len) {
+void slhvkSha256Finalize(ShaContext* ctx, uint8_t* output, size_t output_len) {
   size_t pad_start = ctx->ctr % 64;
   memset(&ctx->block[pad_start], 0, 64 - pad_start);
   ctx->block[pad_start] = 0x80;
 
   size_t total_bit_length = 8 * ctx->ctr;
   if (pad_start >= 56) {
-    sha256_compress(ctx->state, ctx->block);
+    slhvkSha256Compress(ctx->state, ctx->block);
     memset(ctx->block, 0, 64);
   }
 
   store_u32(&ctx->block[56], (uint32_t) (total_bit_length >> 32));
   store_u32(&ctx->block[60], (uint32_t) total_bit_length);
-  sha256_compress(ctx->state, ctx->block);
+  slhvkSha256Compress(ctx->state, ctx->block);
 
   output_len = MIN(output_len, 32);
   for (size_t i = 0; i < output_len; i++) {
