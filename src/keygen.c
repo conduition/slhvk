@@ -363,13 +363,12 @@ int slhvkKeygen(
     if (err) goto cleanup;
 
     // Read the pkRoots from the IO buffer.
-    uint8_t* pkRootsMapped;
+    uint8_t (*pkRootsMapped)[N];
     err = vkMapMemory(ctx->primaryDevice, keygenIOMemory, 0, keygenIOBufferSize, 0, (void**) &pkRootsMapped);
     if (err) goto cleanup;
     for (uint32_t i = 0; i < keysChunkCount && keysGenerated + i < keysCount; i++) {
-      uint32_t offset = i * N;
       for (uint32_t j = 0; j < N; j++) {
-        pkRootsOut[keysGenerated + i][j] = pkRootsMapped[offset + j];
+        pkRootsOut[keysGenerated + i][j] = pkRootsMapped[i][j];
       }
     }
     vkUnmapMemory(ctx->primaryDevice, keygenIOMemory);

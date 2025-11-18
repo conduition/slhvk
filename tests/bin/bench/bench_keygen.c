@@ -52,12 +52,6 @@ int main() {
 
   printf("took %.2f ms per key gen\n", timeDeltaMillis(start, end) / (double) nRuns);
 
-  // memcpy(pkRoot, pkRoots[0], SLHVK_N);
-  // printf("generated pk_root: ");
-  // for (int j = 0; j < SLHVK_N; j++)
-  //   printf("%02x", pkRoot[j]);
-  // printf("\n");
-
 
 cleanup:
   slhvkContextFree(ctx);
