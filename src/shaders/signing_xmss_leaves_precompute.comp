@@ -20,6 +20,8 @@ void main() {
   if (thread_id >= THREAD_COUNT) return;
 
   uint layer_address = thread_id / XMSS_LEAVES;
+  if (layer_address >= HYPERTREE_LAYERS - cached_tree_layers) return;
+
   uint keypair_address = thread_id % XMSS_LEAVES;
   uint64 tree_address_shifted = shifted_tree_address(tree_address, XMSS_HEIGHT, layer_address);
 

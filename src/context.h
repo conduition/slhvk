@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stdbool.h>
 #include <vulkan/vulkan.h>
 
 #include "slhvk.h"
@@ -32,6 +33,10 @@ typedef struct CommonSigningInputs {
 
   // the index of the layer 0 keypair to be used for signing the message.
   uint32_t signingKeypairAddress;
+
+  // Indicates if top-level XMSS tree leaves have been preloaded into memory, saving
+  // us from redundant recomputation.
+  uint32_t cachedTreeLayers;
 } CommonSigningInputs;
 
 typedef struct SlhvkContext_T {
@@ -97,6 +102,7 @@ typedef struct SlhvkContext_T {
   // primary device buffers
   VkBuffer primaryInputsBufferDeviceLocal;
   VkBuffer primaryInputsBufferHostVisible;
+  VkBuffer primaryXmssRootTreeStagingBuffer;
   VkBuffer primaryWotsChainBuffer;
   VkBuffer primaryXmssNodesBuffer;
   VkBuffer primaryXmssMessagesBuffer;
@@ -107,6 +113,7 @@ typedef struct SlhvkContext_T {
   // primary device memory backings (one per buffer)
   VkDeviceMemory primaryInputsBufferDeviceLocalMemory;
   VkDeviceMemory primaryInputsBufferHostVisibleMemory;
+  VkDeviceMemory primaryXmssRootTreeStagingBufferMemory;
   VkDeviceMemory primaryWotsChainBufferMemory;
   VkDeviceMemory primaryXmssNodesBufferMemory;
   VkDeviceMemory primaryXmssMessagesBufferMemory;

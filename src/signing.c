@@ -24,6 +24,7 @@ int slhvkSignPure(
   uint8_t contextStringSize,
   const uint8_t* rawMessage,
   size_t rawMessageSize,
+  uint8_t cachedXmssRootTree[SLHVK_XMSS_CACHED_TREE_SIZE],
   uint8_t signatureOutput[SLHVK_SIGNATURE_SIZE]
 ) {
   // Deterministic mode
@@ -113,7 +114,33 @@ int slhvkSignPure(
     }
     mapped->treeAddress = treeAddress;
     mapped->signingKeypairAddress = signingKeypairAddress;
+    mapped->cachedTreeLayers = (cachedXmssRootTree == NULL ? 0 : 1);
     vkUnmapMemory(devices[i], memories[i]);
+  }
+
+  // Write the root XMSS tree to the correct input region.
+  if (cachedXmssRootTree != NULL) {
+    VkDeviceMemory memory = ctx->primaryXmssRootTreeStagingBufferMemory;
+    size_t offset = 0;
+
+    // Write directly to device local memory if possible
+    if ((ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+      memory = ctx->primaryXmssNodesBufferMemory;
+      offset = N * SLHVK_XMSS_LEAVES * (SLHVK_HYPERTREE_LAYERS - 1);
+    }
+
+    uint8_t* rootTreeMapped;
+    err = vkMapMemory(
+      ctx->primaryDevice,
+      memory,
+      offset,
+      SLHVK_XMSS_CACHED_TREE_SIZE,
+      0,
+      (void**) &rootTreeMapped
+    );
+    memcpy(rootTreeMapped, cachedXmssRootTree, SLHVK_XMSS_CACHED_TREE_SIZE);
+    if (err) goto cleanup;
+    vkUnmapMemory(ctx->primaryDevice, memory);
   }
 
   // Submit the XMSS precomputation shaders right away, because they take the most runtime.

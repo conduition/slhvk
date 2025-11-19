@@ -37,6 +37,7 @@ void slhvkContextFree(SlhvkContext_T* ctx) {
       // Primary device buffers
       vkDestroyBuffer(ctx->primaryDevice, ctx->primaryInputsBufferDeviceLocal, NULL);
       vkDestroyBuffer(ctx->primaryDevice, ctx->primaryInputsBufferHostVisible, NULL);
+      vkDestroyBuffer(ctx->primaryDevice, ctx->primaryXmssRootTreeStagingBuffer, NULL);
       vkDestroyBuffer(ctx->primaryDevice, ctx->primaryWotsChainBuffer, NULL);
       vkDestroyBuffer(ctx->primaryDevice, ctx->primaryXmssNodesBuffer, NULL);
       vkDestroyBuffer(ctx->primaryDevice, ctx->primaryXmssMessagesBuffer, NULL);
@@ -57,6 +58,7 @@ void slhvkContextFree(SlhvkContext_T* ctx) {
       // Primary device memory
       vkFreeMemory(ctx->primaryDevice, ctx->primaryInputsBufferDeviceLocalMemory, NULL);
       vkFreeMemory(ctx->primaryDevice, ctx->primaryInputsBufferHostVisibleMemory, NULL);
+      vkFreeMemory(ctx->primaryDevice, ctx->primaryXmssRootTreeStagingBufferMemory, NULL);
       vkFreeMemory(ctx->primaryDevice, ctx->primaryWotsChainBufferMemory, NULL);
       vkFreeMemory(ctx->primaryDevice, ctx->primaryXmssNodesBufferMemory, NULL);
       vkFreeMemory(ctx->primaryDevice, ctx->primaryXmssMessagesBufferMemory, NULL);
@@ -352,6 +354,11 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryInputsBufferHostVisible);
   if (err) goto cleanup;
 
+  bufferCreateInfo.size = SLHVK_XMSS_CACHED_TREE_SIZE;
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+  err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryXmssRootTreeStagingBuffer);
+  if (err) goto cleanup;
+
   bufferCreateInfo.size = WOTS_CHAIN_BUFFER_SIZE;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryWotsChainBuffer);
@@ -496,6 +503,16 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
       &ctx->primaryDeviceHostVisibleMemoryFlags,
       &ctx->primaryInputsBufferHostVisibleMemory
+    );
+    if (err) goto cleanup;
+
+    err = slhvkAllocateBufferMemory(
+      ctx->primaryDevice,
+      ctx->primaryPhysicalDevice,
+      ctx->primaryXmssRootTreeStagingBuffer,
+      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+      &ctx->primaryDeviceHostVisibleMemoryFlags,
+      &ctx->primaryXmssRootTreeStagingBufferMemory
     );
     if (err) goto cleanup;
 
@@ -972,6 +989,20 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       0, // offset
       VK_WHOLE_SIZE,
       0 // data
+    );
+
+    // Copy the cached root tree to the xmss nodes buffer. Source buffer may or may not
+    // be populated but copy it anyway.
+    regions = (VkBufferCopy) {
+      .size = SLHVK_XMSS_CACHED_TREE_SIZE,
+      .dstOffset = N * SLHVK_XMSS_LEAVES * (SLHVK_HYPERTREE_LAYERS - 1),
+    };
+    vkCmdCopyBuffer(
+      ctx->primaryHypertreePresignCommandBuffer,
+      ctx->primaryXmssRootTreeStagingBuffer, // src
+      ctx->primaryXmssNodesBuffer,           // dest
+      1, // region count
+      &regions // regions
     );
   }
 

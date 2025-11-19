@@ -13,4 +13,8 @@ layout(binding = 0) buffer inputs {
 
   // the index of the WOTS keypair to be used for signing the message at hypertree layer zero.
   uint signing_keypair_address;
+
+  // Indicates if the top layers of XMSS tree leaves have been preloaded into memory, saving
+  // us from redundant recomputation.
+  uint cached_tree_layers;
 };

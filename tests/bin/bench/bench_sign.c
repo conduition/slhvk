@@ -23,8 +23,16 @@ int main() {
   uint8_t skPrf[SLHVK_N] = {0};
   uint8_t skSeed[SLHVK_N] = {0x00, 0x00, 0x11, 0x22, 0xff, 0x29, 0x99, 0x90,
                              0x01, 0x02, 0x03, 0x04, 0xaa, 0xbb, 0xcc, 0xdd};
-  uint8_t pkRoot[SLHVK_N] = {0x8f, 0x0c, 0x8e, 0xe4, 0xaf, 0xdf, 0xc4, 0x64,
-                             0x61, 0x75, 0xc8, 0x35, 0x1e, 0x17, 0x6a, 0x2f};
+  // uint8_t pkRoot[SLHVK_N] = {0x8f, 0x0c, 0x8e, 0xe4, 0xaf, 0xdf, 0xc4, 0x64,
+  //                            0x61, 0x75, 0xc8, 0x35, 0x1e, 0x17, 0x6a, 0x2f};
+  uint8_t pkRoot[SLHVK_N];
+  uint8_t cachedRootTree[SLHVK_XMSS_CACHED_TREE_SIZE];
+
+  err = slhvkKeygen(ctx, skSeed, pkSeed, pkRoot, cachedRootTree);
+  if (err) {
+    eprintf("failed to run keygen: %d\n", err);
+    goto cleanup;
+  }
 
   uint8_t message[] = "hello world";
   uint8_t contextString[] = "string";
@@ -49,6 +57,7 @@ int main() {
         sizeof(contextString) - 1, // minus 1 for null terminator
         message,
         sizeof(message) - 1, // minus 1 for null terminator
+        cachedRootTree,
         slhDsaSignature
       );
       if (err) {

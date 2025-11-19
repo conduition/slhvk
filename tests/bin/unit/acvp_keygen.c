@@ -34,18 +34,22 @@ int main() {
 
   uint8_t** skSeeds = malloc(testCasesCount * sizeof(uint8_t*));
   uint8_t** pkSeeds = malloc(testCasesCount * sizeof(uint8_t*));
+  uint8_t** cachedRootTrees = malloc(testCasesCount * sizeof(uint8_t*));
   uint8_t** pkRoots = malloc(testCasesCount * sizeof(uint8_t*));
+
+  uint8_t (*cachedRootTreesBacking)[SLHVK_XMSS_CACHED_TREE_SIZE] = malloc(testCasesCount * SLHVK_XMSS_CACHED_TREE_SIZE);
   uint8_t* pkRootsBacking = malloc(testCasesCount * SLHVK_N);
 
   for (int i = 0; i < testCasesCount; i++) {
-    skSeeds[i] = &testCases[i].skSeed[0];
-    pkSeeds[i] = &testCases[i].pkSeed[0];
+    skSeeds[i] = testCases[i].skSeed;
+    pkSeeds[i] = testCases[i].pkSeed;
     pkRoots[i] = &pkRootsBacking[i * SLHVK_N];
+    cachedRootTrees[i] = cachedRootTreesBacking[i];
   }
 
   Time start, end;
   getTime(&start);
-  err = slhvkKeygen(ctx, testCasesCount, skSeeds, pkSeeds, pkRoots);
+  err = slhvkKeygenBulk(ctx, testCasesCount, skSeeds, pkSeeds, pkRoots, cachedRootTrees);
   if (err) {
     eprintf("failed to run keygen: %d\n", err);
     goto cleanup;
@@ -82,6 +86,8 @@ cleanup:
   free(pkSeeds);
   free(pkRoots);
   free(pkRootsBacking);
+  free(cachedRootTrees);
+  free(cachedRootTreesBacking);
 
   return err;
 }

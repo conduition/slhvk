@@ -29,19 +29,22 @@ int main() {
   uint8_t* skSeeds[KEYGEN_RUNS];
   uint8_t* pkSeeds[KEYGEN_RUNS];
   uint8_t pkRoots[KEYGEN_RUNS][SLHVK_N];
+  uint8_t cachedRootTree[SLHVK_XMSS_CACHED_TREE_SIZE];
   uint8_t* pkRootsPtr[KEYGEN_RUNS];
+  uint8_t* cachedRootTreesPtr[KEYGEN_RUNS];
 
   for (int i = 0; i < KEYGEN_RUNS; i++) {
     skSeeds[i] = skSeed;
     pkSeeds[i] = pkSeed;
-    pkRootsPtr[i] = &pkRoots[i][0];
+    pkRootsPtr[i] = pkRoots[i];
+    cachedRootTreesPtr[i] = cachedRootTree;
   }
 
   int nRuns = 0;
   Time start, end;
   getTime(&start);
   do {
-    err = slhvkKeygen(ctx, KEYGEN_RUNS, skSeeds, pkSeeds, pkRootsPtr);
+    err = slhvkKeygenBulk(ctx, KEYGEN_RUNS, skSeeds, pkSeeds, pkRootsPtr, cachedRootTreesPtr);
     if (err) {
       eprintf("failed to run keygen: %d\n", err);
       goto cleanup;

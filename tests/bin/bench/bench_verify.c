@@ -43,6 +43,7 @@ int main() {
     sizeof(contextString) - 1, // minus 1 for null terminator
     message,
     sizeof(message) - 1, // minus 1 for null terminator
+    NULL,
     slhDsaSignature
   );
   if (err) {

@@ -81,15 +81,25 @@ int slhvkSignPure(
   uint8_t contextStringSize,
   const uint8_t* rawMessage,
   size_t rawMessageSize,
+  uint8_t cachedXmssRootTree[SLHVK_XMSS_CACHED_TREE_SIZE],
   uint8_t signatureOutput[SLHVK_SIGNATURE_SIZE]
 );
 
-int slhvkKeygen(
+int slhvkKeygenBulk(
   SlhvkContext ctx,
   uint32_t keysCount,
   uint8_t* const* skSeeds,
   uint8_t* const* pkSeeds,
-  uint8_t** pkRootsOut
+  uint8_t** pkRootsOut,
+  uint8_t** cachedRootTreesOut
+);
+
+int slhvkKeygen(
+  SlhvkContext ctx,
+  uint8_t skSeed[SLHVK_N],
+  uint8_t pkSeed[SLHVK_N],
+  uint8_t* pkRoot,
+  uint8_t* cachedRootTree
 );
 
 int slhvkVerifyPure(

@@ -23,6 +23,8 @@ void main() {
   if (thread_id >= THREAD_COUNT) return;
 
   uint layer_address = thread_id / WOTS_CHAINS_PER_LAYER;
+  if (layer_address >= HYPERTREE_LAYERS - cached_tree_layers) return;
+
   uint keypair_address = (thread_id % WOTS_CHAINS_PER_LAYER) / WOTS_CHAIN_COUNT;
   uint chain_address = thread_id % WOTS_CHAIN_COUNT;
 

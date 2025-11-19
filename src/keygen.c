@@ -7,12 +7,13 @@
 #include "vkutil.h"
 #include "sha256.h"
 
-int slhvkKeygen(
+int slhvkKeygenBulk(
   SlhvkContext ctx,
   uint32_t keysCount,
   uint8_t* const* skSeeds,
   uint8_t* const* pkSeeds,
-  uint8_t** pkRootsOut
+  uint8_t** pkRootsOut,
+  uint8_t** cachedRootTreesOut
 ) {
   int err = 0;
   VkBuffer keygenIOStagingBuffer = NULL;
@@ -21,6 +22,7 @@ int slhvkKeygen(
   VkBuffer keygenSha256StateBuffer = NULL;
   VkBuffer keygenWotsChainBuffer = NULL;
   VkBuffer keygenXmssNodesBuffer = NULL;
+  VkBuffer keygenXmssRootTreesBuffer = NULL;
 
   VkDeviceMemory keygenIOStagingBufferMemory = NULL;
   VkDeviceMemory keygenSha256StateStagingBufferMemory = NULL;
@@ -28,6 +30,7 @@ int slhvkKeygen(
   VkDeviceMemory keygenSha256StateBufferMemory = NULL;
   VkDeviceMemory keygenWotsChainBufferMemory = NULL;
   VkDeviceMemory keygenXmssNodesBufferMemory = NULL;
+  VkDeviceMemory keygenXmssRootTreesBufferMemory = NULL;
 
   VkFence fence = NULL;
 
@@ -44,6 +47,7 @@ int slhvkKeygen(
 
   const size_t keygenIOBufferSize = keysChunkCount * N;
   const size_t sha256StateBufferSize = keysChunkCount * 8 * sizeof(uint32_t);
+  const size_t xmssNodesBufferSize = keysChunkCount * N * SLHVK_XMSS_LEAVES;
 
   /**************  Create keygen buffers  *******************/
 
@@ -67,11 +71,17 @@ int slhvkKeygen(
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenWotsChainBuffer);
   if (err) goto cleanup;
 
-  bufferCreateInfo.size = keysChunkCount * N * SLHVK_XMSS_LEAVES;
+  bufferCreateInfo.size = xmssNodesBufferSize;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenXmssNodesBuffer);
   if (err) goto cleanup;
 
+  if (cachedRootTreesOut != NULL) {
+    bufferCreateInfo.size = xmssNodesBufferSize;
+    bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenXmssRootTreesBuffer);
+    if (err) goto cleanup;
+  }
 
   /***************  Allocate keygen buffer memory backing  ********************/
 
@@ -141,6 +151,19 @@ int slhvkKeygen(
 
     keygenIOMemory = keygenIOStagingBufferMemory;
     shaStateInputMemory = keygenSha256StateStagingBufferMemory;
+  }
+
+  // This buffer must always be host visible
+  if (cachedRootTreesOut != NULL) {
+    err = slhvkAllocateBufferMemory(
+      ctx->primaryDevice,
+      ctx->primaryPhysicalDevice,
+      keygenXmssRootTreesBuffer,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+      NULL,
+      &keygenXmssRootTreesBufferMemory
+    );
+    if (err) goto cleanup;
   }
 
   slhvkBindBuffersToDescriptorSet(
@@ -259,6 +282,18 @@ int slhvkKeygen(
     1   // Z dimension workgroups
   );
 
+  // If needed, copy the root tree leaf nodes back to the host so they can be cached.
+  if (cachedRootTreesOut != NULL) {
+    VkBufferCopy regions = { .size = xmssNodesBufferSize };
+    vkCmdCopyBuffer(
+      primaryKeygenCommandBuffer,
+      keygenXmssNodesBuffer,     // src
+      keygenXmssRootTreesBuffer, // dest
+      1, // region count
+      &regions // regions
+    );
+  }
+
   // Specify that the XMSS roots shader depends on the output of the XMSS leaves shader.
   vkCmdPipelineBarrier(
     primaryKeygenCommandBuffer,
@@ -372,6 +407,27 @@ int slhvkKeygen(
       }
     }
     vkUnmapMemory(ctx->primaryDevice, keygenIOMemory);
+
+    if (cachedRootTreesOut != NULL) {
+      uint8_t (*cachedTreesMapped)[SLHVK_XMSS_CACHED_TREE_SIZE];
+      err = vkMapMemory(
+        ctx->primaryDevice,
+        keygenXmssRootTreesBufferMemory,
+        0,
+        xmssNodesBufferSize,
+        0,
+        (void**) &cachedTreesMapped
+      );
+      if (err) goto cleanup;
+
+      for (uint32_t i = 0; i < keysChunkCount && keysGenerated + i < keysCount; i++) {
+        for (uint32_t j = 0; j < SLHVK_XMSS_CACHED_TREE_SIZE; j++) {
+          cachedRootTreesOut[keysGenerated + i][j] = cachedTreesMapped[i][j];
+        }
+      }
+
+      vkUnmapMemory(ctx->primaryDevice, keygenXmssRootTreesBufferMemory);
+    }
   }
 
 cleanup:
@@ -382,11 +438,27 @@ cleanup:
   vkDestroyBuffer(ctx->primaryDevice, keygenSha256StateBuffer, NULL);
   vkDestroyBuffer(ctx->primaryDevice, keygenWotsChainBuffer, NULL);
   vkDestroyBuffer(ctx->primaryDevice, keygenXmssNodesBuffer, NULL);
+  vkDestroyBuffer(ctx->primaryDevice, keygenXmssRootTreesBuffer, NULL);
   vkFreeMemory(ctx->primaryDevice, keygenIOStagingBufferMemory, NULL);
   vkFreeMemory(ctx->primaryDevice, keygenSha256StateStagingBufferMemory, NULL);
   vkFreeMemory(ctx->primaryDevice, keygenIOBufferMemory, NULL);
   vkFreeMemory(ctx->primaryDevice, keygenSha256StateBufferMemory, NULL);
   vkFreeMemory(ctx->primaryDevice, keygenWotsChainBufferMemory, NULL);
   vkFreeMemory(ctx->primaryDevice, keygenXmssNodesBufferMemory, NULL);
+  vkFreeMemory(ctx->primaryDevice, keygenXmssRootTreesBufferMemory, NULL);
   return err;
+}
+
+int slhvkKeygen(
+  SlhvkContext ctx,
+  uint8_t skSeed[SLHVK_N],
+  uint8_t pkSeed[SLHVK_N],
+  uint8_t* pkRoot,
+  uint8_t* cachedRootTree
+) {
+  uint8_t* const skSeeds[1] = { skSeed };
+  uint8_t* const pkSeeds[1] = { pkSeed };
+  uint8_t* pkRoots[1] = { pkRoot };
+  uint8_t* cachedRootTrees[1] = { cachedRootTree };
+  return slhvkKeygenBulk( ctx, 1, skSeeds, pkSeeds, pkRoots, cachedRootTrees);
 }
