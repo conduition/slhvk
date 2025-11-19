@@ -67,8 +67,9 @@ TEST_VEC_DIR    := tests/vectors
 $(UNIT_TEST_BIN):
 $(BENCH_TEST_BIN):
 
-# build vendor objects (and don't delete them)
-$(TEST_VENDOR_OBJ):
+# build libcjson object (and don't rebuild it unnecessarily)
+tests/vendor/cJSON.o: tests/vendor/cJSON.c
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(TEST_RUNNER): $(TEST_RUNNER_SRC) $(TEST_HDR)
 	$(CC) $(CFLAGS) -o $@ $<
