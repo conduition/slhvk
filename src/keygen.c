@@ -10,8 +10,8 @@
 int slhvkKeygenBulk(
   SlhvkContext ctx,
   uint32_t keysCount,
-  uint8_t* const* skSeeds,
-  uint8_t* const* pkSeeds,
+  uint8_t const* const* skSeeds,
+  uint8_t const* const* pkSeeds,
   uint8_t** pkRootsOut,
   uint8_t** cachedRootTreesOut
 ) {
@@ -451,14 +451,14 @@ cleanup:
 
 int slhvkKeygen(
   SlhvkContext ctx,
-  uint8_t skSeed[SLHVK_N],
-  uint8_t pkSeed[SLHVK_N],
+  uint8_t const skSeed[SLHVK_N],
+  uint8_t const pkSeed[SLHVK_N],
   uint8_t* pkRoot,
   uint8_t* cachedRootTree
 ) {
-  uint8_t* const skSeeds[1] = { skSeed };
-  uint8_t* const pkSeeds[1] = { pkSeed };
+  uint8_t const* skSeeds[1] = { skSeed };
+  uint8_t const* pkSeeds[1] = { pkSeed };
   uint8_t* pkRoots[1] = { pkRoot };
   uint8_t* cachedRootTrees[1] = { cachedRootTree };
-  return slhvkKeygenBulk( ctx, 1, skSeeds, pkSeeds, pkRoots, cachedRootTrees);
+  return slhvkKeygenBulk(ctx, 1, skSeeds, pkSeeds, pkRoots, cachedRootTrees);
 }

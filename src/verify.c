@@ -26,12 +26,12 @@ typedef struct SlhvkSignatureVerifyRequest {
 int slhvkVerifyPure(
   SlhvkContext ctx,
   uint32_t signaturesLen,
-  uint8_t* const* contextStrings,
+  uint8_t const* const* contextStrings,
   uint8_t const* contextStringSizes,
-  uint8_t* const* pkSeeds,
-  uint8_t* const* pkRoots,
-  uint8_t* const* signatures,
-  uint8_t* const* messages,
+  uint8_t const* const* pkSeeds,
+  uint8_t const* const* pkRoots,
+  uint8_t const* const* signatures,
+  uint8_t const* const* messages,
   size_t const* messageSizes,
   int* verifyResultsOut
 ) {

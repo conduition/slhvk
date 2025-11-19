@@ -32,8 +32,8 @@ int main() {
     return err;
   }
 
-  uint8_t** skSeeds = malloc(testCasesCount * sizeof(uint8_t*));
-  uint8_t** pkSeeds = malloc(testCasesCount * sizeof(uint8_t*));
+  const uint8_t** skSeeds = malloc(testCasesCount * sizeof(uint8_t*));
+  const uint8_t** pkSeeds = malloc(testCasesCount * sizeof(uint8_t*));
   uint8_t** cachedRootTrees = malloc(testCasesCount * sizeof(uint8_t*));
   uint8_t** pkRoots = malloc(testCasesCount * sizeof(uint8_t*));
 

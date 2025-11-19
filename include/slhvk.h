@@ -72,32 +72,32 @@ int slhvkContextInit(SlhvkContext* ctxPtr);
 
 int slhvkSignPure(
   SlhvkContext ctx,
-  const uint8_t skSeed[SLHVK_N],
-  const uint8_t skPrf[SLHVK_N],
-  const uint8_t pkSeed[SLHVK_N],
-  const uint8_t pkRoot[SLHVK_N],
-  const uint8_t addrnd[SLHVK_N],
-  const uint8_t* contextString,
+  uint8_t const skSeed[SLHVK_N],
+  uint8_t const skPrf[SLHVK_N],
+  uint8_t const pkSeed[SLHVK_N],
+  uint8_t const pkRoot[SLHVK_N],
+  uint8_t const addrnd[SLHVK_N],
+  uint8_t const* contextString,
   uint8_t contextStringSize,
-  const uint8_t* rawMessage,
+  uint8_t const* rawMessage,
   size_t rawMessageSize,
-  uint8_t cachedXmssRootTree[SLHVK_XMSS_CACHED_TREE_SIZE],
+  uint8_t const cachedXmssRootTree[SLHVK_XMSS_CACHED_TREE_SIZE],
   uint8_t signatureOutput[SLHVK_SIGNATURE_SIZE]
 );
 
 int slhvkKeygenBulk(
   SlhvkContext ctx,
   uint32_t keysCount,
-  uint8_t* const* skSeeds,
-  uint8_t* const* pkSeeds,
+  uint8_t const* const* skSeeds,
+  uint8_t const* const* pkSeeds,
   uint8_t** pkRootsOut,
   uint8_t** cachedRootTreesOut
 );
 
 int slhvkKeygen(
   SlhvkContext ctx,
-  uint8_t skSeed[SLHVK_N],
-  uint8_t pkSeed[SLHVK_N],
+  uint8_t const skSeed[SLHVK_N],
+  uint8_t const pkSeed[SLHVK_N],
   uint8_t* pkRoot,
   uint8_t* cachedRootTree
 );
@@ -105,12 +105,12 @@ int slhvkKeygen(
 int slhvkVerifyPure(
   SlhvkContext ctx,
   uint32_t signaturesLen,
-  uint8_t* const* contextStrings,
+  uint8_t const* const* contextStrings,
   uint8_t const* contextStringSizes,
-  uint8_t* const* pkSeeds,
-  uint8_t* const* pkRoots,
-  uint8_t* const* signatures,
-  uint8_t* const* messages,
+  uint8_t const* const* pkSeeds,
+  uint8_t const* const* pkRoots,
+  uint8_t const* const* signatures,
+  uint8_t const* const* messages,
   size_t const* messageSizes,
   int* verifyResultsOut
 );

@@ -52,12 +52,12 @@ int main() {
   }
 
   #define SIGS_LEN 2048
-  uint8_t* pkSeeds[SIGS_LEN];
-  uint8_t* pkRoots[SIGS_LEN];
-  uint8_t* signatures[SIGS_LEN];
-  uint8_t* messages[SIGS_LEN];
+  uint8_t const* pkSeeds[SIGS_LEN];
+  uint8_t const* pkRoots[SIGS_LEN];
+  uint8_t const* signatures[SIGS_LEN];
+  uint8_t const* messages[SIGS_LEN];
   size_t messageSizes[SIGS_LEN];
-  uint8_t* contextStrings[SIGS_LEN];
+  uint8_t const* contextStrings[SIGS_LEN];
   uint8_t contextStringSizes[SIGS_LEN];
   for (int i = 0; i < SIGS_LEN; i++) {
     pkSeeds[i] = pkSeed;

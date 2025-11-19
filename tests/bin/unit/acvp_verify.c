@@ -29,14 +29,14 @@ int main() {
   Time start, end;
   getTime(&start);
 
-  int* verifyResults          = malloc(testCasesCount * sizeof(int));
-  uint8_t** pkSeeds           = malloc(testCasesCount * sizeof(uint8_t*));
-  uint8_t** pkRoots           = malloc(testCasesCount * sizeof(uint8_t*));
-  uint8_t** messages          = malloc(testCasesCount * sizeof(uint8_t*));
-  size_t* messageSizes        = malloc(testCasesCount * sizeof(size_t));
-  uint8_t** signatures        = malloc(testCasesCount * sizeof(uint8_t*));
-  uint8_t** contextStrings    = malloc(testCasesCount * sizeof(uint8_t*));
-  uint8_t* contextStringSizes = malloc(testCasesCount * sizeof(uint8_t));
+  int* verifyResults             = malloc(testCasesCount * sizeof(int));
+  uint8_t const** pkSeeds        = malloc(testCasesCount * sizeof(uint8_t*));
+  uint8_t const** pkRoots        = malloc(testCasesCount * sizeof(uint8_t*));
+  uint8_t const** messages       = malloc(testCasesCount * sizeof(uint8_t*));
+  size_t* messageSizes           = malloc(testCasesCount * sizeof(size_t));
+  uint8_t const** signatures     = malloc(testCasesCount * sizeof(uint8_t*));
+  uint8_t const** contextStrings = malloc(testCasesCount * sizeof(uint8_t*));
+  uint8_t* contextStringSizes    = malloc(testCasesCount * sizeof(uint8_t));
 
   for (int i = 0; i < testCasesCount; i++) {
     pkSeeds[i] = testCases[i].pkSeed;
