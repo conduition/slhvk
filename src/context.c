@@ -350,7 +350,9 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   bufferCreateInfo.size = sizeof(CommonSigningInputs);
-  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                           VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                           VK_BUFFER_USAGE_TRANSFER_DST_BIT; // Need DST because we want to use vkCmdFillBuffer
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryInputsBufferHostVisible);
   if (err) goto cleanup;
 
@@ -365,7 +367,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   bufferCreateInfo.size = XMSS_NODES_BUFFER_SIZE;
-  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryXmssNodesBuffer);
   if (err) goto cleanup;
 
@@ -397,7 +399,9 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   bufferCreateInfo.size = sizeof(CommonSigningInputs);
-  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+  bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                           VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                           VK_BUFFER_USAGE_TRANSFER_DST_BIT; // Need DST because we want to use vkCmdFillBuffer
   err = vkCreateBuffer(ctx->secondaryDevice, &bufferCreateInfo, NULL, &ctx->secondaryInputsBufferHostVisible);
   if (err) goto cleanup;
 
