@@ -720,7 +720,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     ctx->secondaryForsSignatureBufferDeviceLocal,
   };
   slhvkBindBuffersToDescriptorSet(
-    ctx->primaryDevice,
+    ctx->secondaryDevice,
     secondarySigningBuffers,
     SECONDARY_SIGNING_PIPELINE_DESCRIPTOR_COUNT,
     ctx->secondarySigningDescriptorSet
