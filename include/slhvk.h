@@ -1,7 +1,5 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
-
 // Security parameter.
 #define SLHVK_N 16
 #define SLHVK_HASH_WORDS (SLHVK_N / 4)
@@ -59,6 +57,7 @@
 // Vulkan parameters
 #define SLHVK_DEFAULT_WORK_GROUP_SIZE 64
 
+
 typedef struct SlhvkContext_T* SlhvkContext;
 
 typedef enum SlhvkError {
@@ -69,6 +68,13 @@ typedef enum SlhvkError {
 
 void slhvkContextFree(SlhvkContext ctx);
 int slhvkContextInit(SlhvkContext* ctxPtr);
+
+
+typedef struct SlhvkCachedRootTree_T* SlhvkCachedRootTree;
+
+int slhvkCachedRootTreeInit(SlhvkContext ctx, SlhvkCachedRootTree* cachedRootTreePtr);
+void slhvkCachedRootTreeFree(SlhvkCachedRootTree cachedRootTree);
+
 
 int slhvkSignPure(
   SlhvkContext ctx,
@@ -81,7 +87,7 @@ int slhvkSignPure(
   uint8_t contextStringSize,
   uint8_t const* rawMessage,
   size_t rawMessageSize,
-  uint8_t const cachedXmssRootTree[SLHVK_XMSS_CACHED_TREE_SIZE],
+  const SlhvkCachedRootTree cachedXmssRootTree,
   uint8_t signatureOutput[SLHVK_SIGNATURE_SIZE]
 );
 
@@ -91,7 +97,7 @@ int slhvkKeygenBulk(
   uint8_t const* const* skSeeds,
   uint8_t const* const* pkSeeds,
   uint8_t** pkRootsOut,
-  uint8_t** cachedRootTreesOut
+  SlhvkCachedRootTree* cachedRootTreesOut
 );
 
 int slhvkKeygen(
@@ -99,7 +105,7 @@ int slhvkKeygen(
   uint8_t const skSeed[SLHVK_N],
   uint8_t const pkSeed[SLHVK_N],
   uint8_t* pkRoot,
-  uint8_t* cachedRootTree
+  SlhvkCachedRootTree cachedRootTree
 );
 
 int slhvkVerifyPure(

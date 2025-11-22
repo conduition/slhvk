@@ -34,17 +34,23 @@ int main() {
 
   const uint8_t** skSeeds = malloc(testCasesCount * sizeof(uint8_t*));
   const uint8_t** pkSeeds = malloc(testCasesCount * sizeof(uint8_t*));
-  uint8_t** cachedRootTrees = malloc(testCasesCount * sizeof(uint8_t*));
   uint8_t** pkRoots = malloc(testCasesCount * sizeof(uint8_t*));
-
-  uint8_t (*cachedRootTreesBacking)[SLHVK_XMSS_CACHED_TREE_SIZE] = malloc(testCasesCount * SLHVK_XMSS_CACHED_TREE_SIZE);
   uint8_t* pkRootsBacking = malloc(testCasesCount * SLHVK_N);
-
   for (int i = 0; i < testCasesCount; i++) {
     skSeeds[i] = testCases[i].skSeed;
     pkSeeds[i] = testCases[i].pkSeed;
     pkRoots[i] = &pkRootsBacking[i * SLHVK_N];
-    cachedRootTrees[i] = cachedRootTreesBacking[i];
+  }
+
+  uint32_t cachedRootTreesAllocated = 0;
+  SlhvkCachedRootTree* cachedRootTrees = malloc(testCasesCount * sizeof(SlhvkCachedRootTree));
+  for (int i = 0; i < testCasesCount; i++) {
+    err = slhvkCachedRootTreeInit(ctx, &cachedRootTrees[i]);
+    if (err) {
+      eprintf("failed to initialize cached root tree buffer: %d\n", err);
+      goto cleanup;
+    }
+    cachedRootTreesAllocated += 1;
   }
 
   Time start, end;
@@ -80,6 +86,8 @@ int main() {
   }
 
 cleanup:
+  for (uint32_t i = 0; i < cachedRootTreesAllocated; i++)
+    slhvkCachedRootTreeFree(cachedRootTrees[i]);
   slhvkContextFree(ctx);
   free(testCases);
   free(skSeeds);
@@ -87,7 +95,6 @@ cleanup:
   free(pkRoots);
   free(pkRootsBacking);
   free(cachedRootTrees);
-  free(cachedRootTreesBacking);
 
   return err;
 }

@@ -26,7 +26,13 @@ int main() {
   // uint8_t pkRoot[SLHVK_N] = {0x8f, 0x0c, 0x8e, 0xe4, 0xaf, 0xdf, 0xc4, 0x64,
   //                            0x61, 0x75, 0xc8, 0x35, 0x1e, 0x17, 0x6a, 0x2f};
   uint8_t pkRoot[SLHVK_N];
-  uint8_t cachedRootTree[SLHVK_XMSS_CACHED_TREE_SIZE];
+
+  SlhvkCachedRootTree cachedRootTree = NULL;
+  err = slhvkCachedRootTreeInit(ctx, &cachedRootTree);
+  if (err) {
+    eprintf("failed to initialize cached root tree: %d\n", err);
+    goto cleanup;
+  }
 
   err = slhvkKeygen(ctx, skSeed, pkSeed, pkRoot, cachedRootTree);
   if (err) {
@@ -76,6 +82,7 @@ int main() {
   printf("took %.2f ms per signature\n", timeDeltaMillis(start, end) / (double) nRuns);
 
 cleanup:
+  slhvkCachedRootTreeFree(cachedRootTree);
   slhvkContextFree(ctx);
 
   return err;

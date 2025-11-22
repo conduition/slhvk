@@ -4,6 +4,7 @@
 
 #include "context.h"
 #include "hashing.h"
+#include "keygen.h"
 #include "sha256.h"
 
 static void prepstate(ShaContext* shaCtx, const uint8_t pkSeed[N]) {
@@ -24,7 +25,7 @@ int slhvkSignPure(
   uint8_t contextStringSize,
   uint8_t const* rawMessage,
   size_t rawMessageSize,
-  uint8_t const cachedXmssRootTree[SLHVK_XMSS_CACHED_TREE_SIZE],
+  const SlhvkCachedRootTree cachedXmssRootTree,
   uint8_t signatureOutput[SLHVK_SIGNATURE_SIZE]
 ) {
   // Deterministic mode
@@ -118,38 +119,72 @@ int slhvkSignPure(
     vkUnmapMemory(devices[i], memories[i]);
   }
 
-  // Write the root XMSS tree to the correct input region.
+  // Write the root XMSS tree to the correct region of the XMSS nodes buffer.
+  VkCommandBufferAllocateInfo cmdBufAllocInfo = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+    .commandPool = ctx->primaryCommandPool,
+    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    .commandBufferCount = 1,
+  };
+  VkCommandBuffer rootTreeCopyCmdBuf = NULL;
+  err = vkAllocateCommandBuffers(ctx->primaryDevice, &cmdBufAllocInfo, &rootTreeCopyCmdBuf);
+  if (err) goto cleanup;
+
+  VkCommandBufferBeginInfo cmdBufBeginInfo = {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+  };
+  err = vkBeginCommandBuffer(rootTreeCopyCmdBuf, &cmdBufBeginInfo);
+  if (err) goto cleanup;
+
+  // Copy the cached root tree to the xmss nodes buffer.
   if (cachedXmssRootTree != NULL) {
-    VkDeviceMemory memory = ctx->primaryXmssRootTreeStagingBufferMemory;
-    size_t offset = 0;
-
-    // Write directly to device local memory if possible
-    if ((ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
-      memory = ctx->primaryXmssNodesBufferMemory;
-      offset = N * SLHVK_XMSS_LEAVES * (SLHVK_HYPERTREE_LAYERS - 1);
-    }
-
-    uint8_t* rootTreeMapped;
-    err = vkMapMemory(
-      ctx->primaryDevice,
-      memory,
-      offset,
-      SLHVK_XMSS_CACHED_TREE_SIZE,
-      0,
-      (void**) &rootTreeMapped
+    VkBufferCopy regions = {
+      .size = SLHVK_XMSS_CACHED_TREE_SIZE,
+      .dstOffset = N * SLHVK_XMSS_LEAVES * (SLHVK_HYPERTREE_LAYERS - 1),
+    };
+    vkCmdCopyBuffer(
+      rootTreeCopyCmdBuf,
+      cachedXmssRootTree->buffer,  // src
+      ctx->primaryXmssNodesBuffer, // dest
+      1, // region count
+      &regions // regions
     );
-    memcpy(rootTreeMapped, cachedXmssRootTree, SLHVK_XMSS_CACHED_TREE_SIZE);
-    if (err) goto cleanup;
-    vkUnmapMemory(ctx->primaryDevice, memory);
   }
 
-  // Submit the XMSS precomputation shaders right away, because they take the most runtime.
-  VkSubmitInfo submitInfo = {
-    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-    .commandBufferCount = 1,
-    .pCommandBuffers = &ctx->primaryHypertreePresignCommandBuffer,
+  // Signal the main signing command buffer that it is safe to continue.
+  vkCmdSetEvent(
+    rootTreeCopyCmdBuf,
+    ctx->primaryXmssRootTreeCopyDoneEvent,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+  );
+
+  err = vkEndCommandBuffer(rootTreeCopyCmdBuf);
+  if (err) goto cleanup;
+
+
+  VkCommandBuffer signingCommandBuffers[2] = {
+    rootTreeCopyCmdBuf,
+    ctx->primaryHypertreePresignCommandBuffer,
   };
-  err = vkQueueSubmit(primaryQueue, 1, &submitInfo, primaryFence);
+
+  // I'm mystified at why I can't just submit both these buffers in one
+  // VkSubmitInfo without getting a validation warning about passing an
+  // invalid VkCommandBuffer handle, followed by segfault.
+  VkSubmitInfo xmssSubmitInfos[2] = {
+    {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &signingCommandBuffers[0],
+    },
+    {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &signingCommandBuffers[1],
+    },
+  };
+
+  // Submit the XMSS precomputation shaders right away, because they take the most runtime.
+  err = vkQueueSubmit(primaryQueue, 2, xmssSubmitInfos, primaryFence);
   if (err) goto cleanup;
 
   // Write the FORS indices to the FORS message buffer so it will be signed.
@@ -170,7 +205,11 @@ int slhvkSignPure(
   vkUnmapMemory(ctx->secondaryDevice, forsMessageMemory);
 
   // Submit the FORS command buffer to the secondary device.
-  submitInfo.pCommandBuffers = &ctx->secondaryForsCommandBuffer;
+  VkSubmitInfo submitInfo = {
+    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    .commandBufferCount = 1,
+    .pCommandBuffers = &ctx->secondaryForsCommandBuffer,
+  };
   err = vkQueueSubmit(secondaryQueue, 1, &submitInfo, secondaryFence);
   if (err) goto cleanup;
 

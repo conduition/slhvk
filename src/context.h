@@ -71,6 +71,7 @@ typedef struct SlhvkContext_T {
   VkPipelineLayout      primarySigningPipelineLayout;
   VkDescriptorSetLayout primarySigningDescriptorSetLayout;
   VkDescriptorSet       primarySigningDescriptorSet;
+  VkEvent               primaryXmssRootTreeCopyDoneEvent;
 
   /*******  Signing resources (secondary)  **********/
   VkShaderModule        forsLeavesGenShader;
@@ -102,7 +103,6 @@ typedef struct SlhvkContext_T {
   // primary device buffers
   VkBuffer primaryInputsBufferDeviceLocal;
   VkBuffer primaryInputsBufferHostVisible;
-  VkBuffer primaryXmssRootTreeStagingBuffer;
   VkBuffer primaryWotsChainBuffer;
   VkBuffer primaryXmssNodesBuffer;
   VkBuffer primaryXmssMessagesBuffer;
@@ -113,7 +113,6 @@ typedef struct SlhvkContext_T {
   // primary device memory backings (one per buffer)
   VkDeviceMemory primaryInputsBufferDeviceLocalMemory;
   VkDeviceMemory primaryInputsBufferHostVisibleMemory;
-  VkDeviceMemory primaryXmssRootTreeStagingBufferMemory;
   VkDeviceMemory primaryWotsChainBufferMemory;
   VkDeviceMemory primaryXmssNodesBufferMemory;
   VkDeviceMemory primaryXmssMessagesBufferMemory;

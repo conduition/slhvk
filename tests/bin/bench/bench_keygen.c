@@ -29,9 +29,15 @@ int main() {
   const uint8_t* skSeeds[KEYGEN_RUNS];
   const uint8_t* pkSeeds[KEYGEN_RUNS];
   uint8_t pkRoots[KEYGEN_RUNS][SLHVK_N];
-  uint8_t cachedRootTree[SLHVK_XMSS_CACHED_TREE_SIZE];
   uint8_t* pkRootsPtr[KEYGEN_RUNS];
-  uint8_t* cachedRootTreesPtr[KEYGEN_RUNS];
+
+  SlhvkCachedRootTree cachedRootTreesPtr[KEYGEN_RUNS];
+  SlhvkCachedRootTree cachedRootTree = NULL;
+  err = slhvkCachedRootTreeInit(ctx, &cachedRootTree);
+  if (err) {
+    eprintf("failed to initialize cached root tree: %d\n", err);
+    goto cleanup;
+  }
 
   for (int i = 0; i < KEYGEN_RUNS; i++) {
     skSeeds[i] = skSeed;
@@ -57,6 +63,7 @@ int main() {
 
 
 cleanup:
+  slhvkCachedRootTreeFree(cachedRootTree);
   slhvkContextFree(ctx);
 
   return err;

@@ -32,8 +32,14 @@ int main() {
     return err;
   }
 
+  SlhvkCachedRootTree cachedRootTree = NULL;
+  err = slhvkCachedRootTreeInit(ctx, &cachedRootTree);
+  if (err) {
+    eprintf("failed to initialize cached root tree: %d\n", err);
+    goto cleanup;
+  }
+
   uint8_t pkRoot[SLHVK_N];
-  uint8_t cachedRootTree[SLHVK_XMSS_CACHED_TREE_SIZE];
   uint8_t slhDsaSignature[SLHVK_SIGNATURE_SIZE];
   Time start, end;
   getTime(&start);
@@ -99,6 +105,7 @@ int main() {
   printf("computed %d valid signatures in %.2f ms\n", testCasesCount * 2, timeDeltaMillis(start, end));
 
 cleanup:
+  slhvkCachedRootTreeFree(cachedRootTree);
   slhvkContextFree(ctx);
   for (int i = 0; i < testCasesCount; i++) {
     freeSigningTestCase(&testCases[i]);
