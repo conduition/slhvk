@@ -46,40 +46,42 @@ int main() {
 
   uint8_t slhDsaSignature[SLHVK_SIGNATURE_SIZE];
 
-  int nRuns = 0;
-  Time start, end;
-  getTime(&start);
-  #define SIGNING_RUNS 100
-  do {
-    for (int i = 0; i < SIGNING_RUNS; i++) {
-      err = slhvkSignPure(
-        ctx,
-        skSeed,
-        skPrf,
-        pkSeed,
-        pkRoot,
-        addrnd,
-        contextString,
-        sizeof(contextString) - 1, // minus 1 for null terminator
-        message,
-        sizeof(message) - 1, // minus 1 for null terminator
-        cachedRootTree,
-        slhDsaSignature
-      );
-      if (err) {
-        eprintf("failed to run signing: %d\n", err);
-        goto cleanup;
+  for (int r = 0; r < 2; r++) {
+    int nRuns = 0;
+    Time start, end;
+    getTime(&start);
+    #define SIGNING_RUNS 100
+    do {
+      for (int i = 0; i < SIGNING_RUNS; i++) {
+        err = slhvkSignPure(
+          ctx,
+          skSeed,
+          skPrf,
+          pkSeed,
+          pkRoot,
+          addrnd,
+          contextString,
+          sizeof(contextString) - 1, // minus 1 for null terminator
+          message,
+          sizeof(message) - 1, // minus 1 for null terminator
+          r > 0 ? cachedRootTree : NULL,
+          slhDsaSignature
+        );
+        if (err) {
+          eprintf("failed to run signing: %d\n", err);
+          goto cleanup;
+        }
       }
-    }
-    nRuns += SIGNING_RUNS;
-    getTime(&end);
-  } while (timeDeltaMillis(start, end) < 5000.0);
+      nRuns += SIGNING_RUNS;
+      getTime(&end);
+    } while (timeDeltaMillis(start, end) < 5000.0);
 
-  // for (int i = 0; i < SLHVK_SIGNATURE_SIZE; i++)
-  //   printf("%02x", slhDsaSignature[i]);
-  // printf("\n");
-
-  printf("took %.2f ms per signature\n", timeDeltaMillis(start, end) / (double) nRuns);
+    printf(
+      "took %.2f ms per signature%s\n",
+      timeDeltaMillis(start, end) / (double) nRuns,
+      r > 0 ? " (cached root tree)" : ""
+    );
+  }
 
 cleanup:
   slhvkCachedRootTreeFree(cachedRootTree);
