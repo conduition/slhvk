@@ -245,14 +245,12 @@ int slhvkKeygenBulk(
 
   /********  allocate and fill the keygen command buffer  *********/
 
-  VkCommandBufferAllocateInfo cmdBufAllocInfo = {
-    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-    .commandPool = ctx->primaryCommandPool,
-    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-    .commandBufferCount = 2,
+  VkCommandBuffer keygenCommandBuffers[2] = {
+    ctx->primaryKeygenCommandBuffer,
+    ctx->primaryXmssRootTreeCopyCommandBuffer,
   };
-  VkCommandBuffer keygenCommandBuffers[2];
-  err = vkAllocateCommandBuffers(ctx->primaryDevice, &cmdBufAllocInfo, keygenCommandBuffers);
+
+  err = vkResetCommandBuffer(keygenCommandBuffers[0], 0);
   if (err) goto cleanup;
 
   VkCommandBufferBeginInfo cmdBufBeginInfo = {

@@ -119,21 +119,15 @@ int slhvkSignPure(
     vkUnmapMemory(devices[i], memories[i]);
   }
 
-  // Write the root XMSS tree to the correct region of the XMSS nodes buffer.
-  VkCommandBufferAllocateInfo cmdBufAllocInfo = {
-    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-    .commandPool = ctx->primaryCommandPool,
-    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-    .commandBufferCount = 1,
-  };
-  VkCommandBuffer rootTreeCopyCmdBuf = NULL;
-  err = vkAllocateCommandBuffers(ctx->primaryDevice, &cmdBufAllocInfo, &rootTreeCopyCmdBuf);
+  // Start the command buffer which may be used to copy the root XMSS tree to the correct
+  // region of the XMSS nodes buffer.
+  err = vkResetCommandBuffer(ctx->primaryXmssRootTreeCopyCommandBuffer, 0);
   if (err) goto cleanup;
 
   VkCommandBufferBeginInfo cmdBufBeginInfo = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
   };
-  err = vkBeginCommandBuffer(rootTreeCopyCmdBuf, &cmdBufBeginInfo);
+  err = vkBeginCommandBuffer(ctx->primaryXmssRootTreeCopyCommandBuffer, &cmdBufBeginInfo);
   if (err) goto cleanup;
 
   // Copy the cached root tree to the xmss nodes buffer.
@@ -143,7 +137,7 @@ int slhvkSignPure(
       .dstOffset = N * SLHVK_XMSS_LEAVES * (SLHVK_HYPERTREE_LAYERS - 1),
     };
     vkCmdCopyBuffer(
-      rootTreeCopyCmdBuf,
+      ctx->primaryXmssRootTreeCopyCommandBuffer,
       cachedXmssRootTree->buffer,  // src
       ctx->primaryXmssNodesBuffer, // dest
       1, // region count
@@ -153,38 +147,27 @@ int slhvkSignPure(
 
   // Signal the main signing command buffer that it is safe to continue.
   vkCmdSetEvent(
-    rootTreeCopyCmdBuf,
+    ctx->primaryXmssRootTreeCopyCommandBuffer,
     ctx->primaryXmssRootTreeCopyDoneEvent,
     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
   );
 
-  err = vkEndCommandBuffer(rootTreeCopyCmdBuf);
+  err = vkEndCommandBuffer(ctx->primaryXmssRootTreeCopyCommandBuffer);
   if (err) goto cleanup;
 
-
   VkCommandBuffer signingCommandBuffers[2] = {
-    rootTreeCopyCmdBuf,
+    ctx->primaryXmssRootTreeCopyCommandBuffer,
     ctx->primaryHypertreePresignCommandBuffer,
   };
 
-  // I'm mystified at why I can't just submit both these buffers in one
-  // VkSubmitInfo without getting a validation warning about passing an
-  // invalid VkCommandBuffer handle, followed by segfault.
-  VkSubmitInfo xmssSubmitInfos[2] = {
-    {
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .commandBufferCount = 1,
-      .pCommandBuffers = &signingCommandBuffers[0],
-    },
-    {
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .commandBufferCount = 1,
-      .pCommandBuffers = &signingCommandBuffers[1],
-    },
+  VkSubmitInfo xmssSubmitInfo = {
+    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    .commandBufferCount = 2,
+    .pCommandBuffers = signingCommandBuffers,
   };
 
   // Submit the XMSS precomputation shaders right away, because they take the most runtime.
-  err = vkQueueSubmit(primaryQueue, 2, xmssSubmitInfos, primaryFence);
+  err = vkQueueSubmit(primaryQueue, 1, &xmssSubmitInfo, primaryFence);
   if (err) goto cleanup;
 
   // Write the FORS indices to the FORS message buffer so it will be signed.

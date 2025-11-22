@@ -111,6 +111,19 @@ void slhvkContextFree(SlhvkContext_T* ctx) {
       vkDestroyPipelineLayout(ctx->primaryDevice, ctx->verifyPipelineLayout, NULL);
       vkDestroyDescriptorSetLayout(ctx->primaryDevice, ctx->verifyDescriptorSetLayout, NULL);
 
+      // Primary command buffers
+      VkCommandBuffer primaryCommandBuffers[] = {
+        ctx->primaryHypertreePresignCommandBuffer,
+        ctx->primaryHypertreeFinishCommandBuffer,
+        ctx->primaryXmssRootTreeCopyCommandBuffer,
+        ctx->primaryKeygenCommandBuffer,
+        ctx->primaryVerifyCommandBuffer,
+      };
+      vkFreeCommandBuffers(ctx->primaryDevice, ctx->primaryCommandPool, 5, primaryCommandBuffers);
+
+      // Secondary command buffers
+      vkFreeCommandBuffers(ctx->secondaryDevice, ctx->secondaryCommandPool, 1, &ctx->secondaryForsCommandBuffer);
+
       // primary device-wide resources
       vkDestroyCommandPool(ctx->primaryDevice, ctx->primaryCommandPool, NULL);
       vkDestroyDescriptorPool(ctx->primaryDevice, ctx->primaryDescriptorPool, NULL);
@@ -938,7 +951,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
 
   /*****************  Create primary device command buffers ******************/
 
-  #define PRIMARY_COMMAND_BUFFER_COUNT 2
+  #define PRIMARY_COMMAND_BUFFER_COUNT 5
   VkCommandBufferAllocateInfo cmdBufAllocInfo = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
     .commandPool = ctx->primaryCommandPool,
@@ -951,6 +964,9 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
 
   ctx->primaryHypertreePresignCommandBuffer = primaryCmdBufs[0];
   ctx->primaryHypertreeFinishCommandBuffer  = primaryCmdBufs[1];
+  ctx->primaryXmssRootTreeCopyCommandBuffer = primaryCmdBufs[2];
+  ctx->primaryKeygenCommandBuffer           = primaryCmdBufs[3];
+  ctx->primaryVerifyCommandBuffer           = primaryCmdBufs[4];
 
 
   /*****************  Create secondary device command buffers ******************/

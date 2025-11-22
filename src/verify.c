@@ -156,28 +156,20 @@ int slhvkVerifyPure(
 
   /********  allocate and fill a verification command buffer  *********/
 
-  VkCommandBufferAllocateInfo cmdBufAllocInfo = {
-    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-    .commandPool = ctx->primaryCommandPool,
-    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-    .commandBufferCount = 1,
-  };
-  VkCommandBuffer verifyCommandBuffer;
-  err = vkAllocateCommandBuffers(ctx->primaryDevice, &cmdBufAllocInfo, &verifyCommandBuffer);
+  err = vkResetCommandBuffer(ctx->primaryVerifyCommandBuffer, 0);
   if (err) goto cleanup;
-
 
   VkCommandBufferBeginInfo cmdBufBeginInfo = {
     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
   };
-  err = vkBeginCommandBuffer(verifyCommandBuffer, &cmdBufBeginInfo);
+  err = vkBeginCommandBuffer(ctx->primaryVerifyCommandBuffer, &cmdBufBeginInfo);
   if (err) goto cleanup;
 
   // If we needed a separate host-visible staging buffer, let's copy that to the device.
   if (signaturesInputMemory == signaturesStagingBufferMemory) {
     VkBufferCopy regions = { .size = signaturesBufferSize };
     vkCmdCopyBuffer(
-      verifyCommandBuffer,
+      ctx->primaryVerifyCommandBuffer,
       signaturesStagingBuffer, // src
       signaturesBuffer,        // dest
       1, // region count
@@ -186,7 +178,7 @@ int slhvkVerifyPure(
   }
 
   vkCmdBindDescriptorSets(
-    verifyCommandBuffer,
+    ctx->primaryVerifyCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
     ctx->verifyPipelineLayout,
     0, // set number of first descriptor_set to be bound
@@ -198,7 +190,7 @@ int slhvkVerifyPure(
 
   // Provide the signatures count as a push constant.
   vkCmdPushConstants(
-    verifyCommandBuffer,
+    ctx->primaryVerifyCommandBuffer,
     ctx->verifyPipelineLayout,
     VK_SHADER_STAGE_COMPUTE_BIT,
     0, //  offset
@@ -208,12 +200,12 @@ int slhvkVerifyPure(
 
   // Bind and dispatch the verification shader.
   vkCmdBindPipeline(
-    verifyCommandBuffer,
+    ctx->primaryVerifyCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
     ctx->verifyPipeline
   );
   vkCmdDispatch(
-    verifyCommandBuffer,
+    ctx->primaryVerifyCommandBuffer,
     slhvkNumWorkGroups(signaturesChunkCount), // One thread per signature
     1,  // Y dimension workgroups
     1   // Z dimension workgroups
@@ -223,7 +215,7 @@ int slhvkVerifyPure(
   if (verifyResultsOutputMemory == verifyResultsStagingBufferMemory) {
     VkBufferCopy regions = { .size = verifyResultsBufferSize };
     vkCmdCopyBuffer(
-      verifyCommandBuffer,
+      ctx->primaryVerifyCommandBuffer,
       verifyResultsBuffer,        // src
       verifyResultsStagingBuffer, // dest
       1, // region count
@@ -231,7 +223,7 @@ int slhvkVerifyPure(
     );
   }
 
-  err = vkEndCommandBuffer(verifyCommandBuffer);
+  err = vkEndCommandBuffer(ctx->primaryVerifyCommandBuffer);
   if (err) goto cleanup;
 
 
@@ -286,7 +278,7 @@ int slhvkVerifyPure(
     VkSubmitInfo submitInfo = {
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
       .commandBufferCount = 1,
-      .pCommandBuffers = &verifyCommandBuffer,
+      .pCommandBuffers = &ctx->primaryVerifyCommandBuffer,
     };
     err = vkQueueSubmit(primaryQueue, 1, &submitInfo, fence);
     if (err) goto cleanup;

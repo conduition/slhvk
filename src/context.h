@@ -151,6 +151,9 @@ typedef struct SlhvkContext_T {
   // primary device command buffers
   VkCommandBuffer primaryHypertreePresignCommandBuffer;
   VkCommandBuffer primaryHypertreeFinishCommandBuffer;
+  VkCommandBuffer primaryXmssRootTreeCopyCommandBuffer;
+  VkCommandBuffer primaryKeygenCommandBuffer;
+  VkCommandBuffer primaryVerifyCommandBuffer;
 
   // secondary device command buffer
   VkCommandBuffer secondaryForsCommandBuffer;
