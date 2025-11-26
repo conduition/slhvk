@@ -270,31 +270,20 @@ struct ForsMerkleProof {
   } \
 }
 
-void define_schedule_1hash(
-  uint layer_address,
-  uint adrs_type,
-  uint keypair_address,
-  uint chain_address,
-  uint hash_address,
-  uint64 tree_address,
-  const in uint hash[HASH_WORDS],
-  out uint schedule[64]
-) {
-  schedule[0] = (layer_address << 24)   | (tree_address.hi >> 8);
-  schedule[1] = (tree_address.hi << 24) | (tree_address.lo >> 8);
-  schedule[2] = (tree_address.lo << 24) | (adrs_type << 16) | (keypair_address >> 16);
-  schedule[3] = (keypair_address << 16) | (chain_address >> 16);
-  schedule[4] = (chain_address << 16)   | (hash_address >> 16);
-
-  define_schedule_1hash_midwords(hash, hash_address, schedule)
-
-  // SHA256 message length in bits.
-  // 8 * (
-  //   64             [pk_seed and padding]
-  //   22             [compressed adrs]
-  //   HASH_WORDS * 4 [hash]
-  // )
-  schedule[15] = 8 * (64 + 22 + 4 * HASH_WORDS);
+// SHA256 message length in bits.
+// 8 * (
+//   64             [pk_seed and padding]
+//   22             [compressed adrs]
+//   HASH_WORDS * 4 [hash]
+// )
+#define define_schedule_1hash(layer_address, adrs_type, keypair_address, chain_address, hash_address, tree_address, hash, schedule) { \
+  schedule[0] = (layer_address << 24)   | (tree_address.hi >> 8); \
+  schedule[1] = (tree_address.hi << 24) | (tree_address.lo >> 8); \
+  schedule[2] = (tree_address.lo << 24) | (adrs_type << 16) | (keypair_address >> 16); \
+  schedule[3] = (keypair_address << 16) | (chain_address >> 16); \
+  schedule[4] = (chain_address << 16)   | (hash_address >> 16); \
+  define_schedule_1hash_midwords(hash, hash_address, schedule) \
+  schedule[15] = 8 * (64 + 22 + 4 * HASH_WORDS); \
 }
 
 void define_schedule_2hash(
