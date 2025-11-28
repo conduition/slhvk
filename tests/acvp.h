@@ -37,7 +37,6 @@ char* readTextFile(const char* fname) {
   FILE* fp = fopen(fname, "r");
   if (fp == NULL) {
     perror("reading test file");
-    fclose(fp);
     return NULL;
   }
 
@@ -47,14 +46,21 @@ char* readTextFile(const char* fname) {
     return NULL;
   }
 
-  char* fileData = malloc(size);
-  size_t bytesRead = fread(fileData, 1, size, fp);
-  if (bytesRead < size) {
-    perror("failed to read entire file");
+  char* fileData = malloc(size + 1);
+  if (fileData == NULL) {
     fclose(fp);
     return NULL;
   }
 
+  size_t bytesRead = fread(fileData, 1, size, fp);
+  if (bytesRead < size) {
+    perror("failed to read entire file");
+    free(fileData);
+    fclose(fp);
+    return NULL;
+  }
+
+  fileData[size] = '\0';
   fclose(fp);
 
   // This must be freed by the caller.
