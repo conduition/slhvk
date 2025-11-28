@@ -70,7 +70,7 @@ char* readTextFile(const char* fname) {
 int hexDecodeChar(char hexChar, uint8_t* out) {
   if (hexChar >= 'A' && hexChar <= 'F') {
     *out = hexChar - 'A' + 10;
-  } else if (hexChar >= 'a' && hexChar <= 'a') {
+  } else if (hexChar >= 'a' && hexChar <= 'f') {
     *out = hexChar - 'a' + 10;
   } else if (hexChar >= '0' && hexChar <= '9') {
     *out = hexChar - '0';
