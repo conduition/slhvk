@@ -73,6 +73,13 @@ To build all test/bench binaries without running them:
 make build-tests
 ```
 
+With Nix:
+
+- Default build (includes tests with bundled ACVP vectors): `nix build`
+- Sanitized build (ASan/UBSan/LSan): `nix build .#san`
+- Dev shell with deps: `nix develop`
+- Run tests from dev shell: `nix develop --command make unit`
+
 ### Header
 
 The exported public API of `libslhvk` is declared in [the `include/slhvk.h` header file](./include/slhvk.h)
