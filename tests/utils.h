@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+#include <stdbool.h>
 
 // https://stackoverflow.com/questions/3219393/stdlib-and-colored-output-in-c
 #define ANSI_COLOR_RED     "\x1b[31m"
@@ -13,7 +14,19 @@
 
 #define eprintf(...) fprintf(stderr, __VA_ARGS__)
 
+static void resetColors(void) {
+  printf("%s", ANSI_COLOR_RESET);
+  fflush(stdout);
+  eprintf("%s", ANSI_COLOR_RESET);
+  fflush(stderr);
+}
+
 void initTest() {
+  static bool colorResetRegistered = false;
+  if (!colorResetRegistered) {
+    atexit(resetColors);
+    colorResetRegistered = true;
+  }
   // Color all test binary output
   printf("%s", ANSI_COLOR_CYAN);
   eprintf("%s", ANSI_COLOR_YELLOW);
