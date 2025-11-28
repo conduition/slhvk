@@ -22,7 +22,10 @@ int run_test(const char* executable, int* exit_status) {
     char* test_silent = getenv("TEST_SILENT");
     if (test_silent != NULL && strcmp(test_silent, "1") == 0) {
       int fd[2];
-      pipe(fd);
+      if (pipe(fd) == -1) {
+        perror("pipe failed");
+        exit(123);
+      }
       dup2(fd[1], STDOUT_FILENO);
     }
 
@@ -48,7 +51,10 @@ int main(int argc, const char* argv[]) {
   }
 
   char oldWorkingDir[4096];
-  getcwd(oldWorkingDir, sizeof(oldWorkingDir));
+  if (getcwd(oldWorkingDir, sizeof(oldWorkingDir)) == NULL) {
+    perror("getcwd failed");
+    return -1;
+  }
 
   for (int i = 1; i < argc; i++) {
     int error = chdir(argv[i]);
