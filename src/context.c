@@ -208,7 +208,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
 
   physicalDevices = (VkPhysicalDevice*) malloc(physicalDevicesCount * sizeof(VkPhysicalDevice));
   err = vkEnumeratePhysicalDevices(ctx->instance, &physicalDevicesCount, physicalDevices);
-  if (err) return err;
+  if (err) goto cleanup;
   else if (physicalDevicesCount == 0) {
     err = SLHVK_ERROR_NO_COMPUTE_DEVICE;
     goto cleanup;
