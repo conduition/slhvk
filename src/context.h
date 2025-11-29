@@ -94,6 +94,7 @@ typedef struct SlhvkContext_T {
   VkDescriptorSet       keygenDescriptorSet;
 
   /********  Verify resources  **********/
+  VkPipelineCache       primaryPipelineCache;
   VkShaderModule        verifyShader;
   VkPipeline            verifyPipeline;
   VkPipelineLayout      verifyPipelineLayout;
@@ -131,14 +132,15 @@ typedef struct SlhvkContext_T {
   VkBuffer secondaryForsRootsBuffer;
 
   // secondary device memory backings (one per buffer)
-  VkDeviceMemory secondaryInputsBufferDeviceLocalMemory;
-  VkDeviceMemory secondaryInputsBufferHostVisibleMemory;
-  VkDeviceMemory secondaryForsMessageBufferDeviceLocalMemory;
-  VkDeviceMemory secondaryForsMessageBufferHostVisibleMemory;
-  VkDeviceMemory secondaryForsNodesBufferMemory;
-  VkDeviceMemory secondaryForsSignatureBufferDeviceLocalMemory;
-  VkDeviceMemory secondaryForsSignatureBufferHostVisibleMemory;
-  VkDeviceMemory secondaryForsRootsBufferMemory;
+  VkPipelineCache secondaryPipelineCache;
+  VkDeviceMemory  secondaryInputsBufferDeviceLocalMemory;
+  VkDeviceMemory  secondaryInputsBufferHostVisibleMemory;
+  VkDeviceMemory  secondaryForsMessageBufferDeviceLocalMemory;
+  VkDeviceMemory  secondaryForsMessageBufferHostVisibleMemory;
+  VkDeviceMemory  secondaryForsNodesBufferMemory;
+  VkDeviceMemory  secondaryForsSignatureBufferDeviceLocalMemory;
+  VkDeviceMemory  secondaryForsSignatureBufferHostVisibleMemory;
+  VkDeviceMemory  secondaryForsRootsBufferMemory;
 
   // per-buffer memory metadata (host visibility / type flags)
   VkMemoryPropertyFlags primaryInputsBufferDeviceLocalFlags;

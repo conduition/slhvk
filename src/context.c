@@ -127,12 +127,14 @@ void slhvkContextFree(SlhvkContext_T* ctx) {
       // primary device-wide resources
       vkDestroyCommandPool(ctx->primaryDevice, ctx->primaryCommandPool, NULL);
       vkDestroyDescriptorPool(ctx->primaryDevice, ctx->primaryDescriptorPool, NULL);
+      vkDestroyPipelineCache(ctx->primaryDevice, ctx->primaryPipelineCache, NULL);
       vkDestroyDevice(ctx->primaryDevice, NULL);
 
       // secondary device wide resources (if not the same as the primary device)
       if (ctx->secondaryDevice != ctx->primaryDevice) {
         vkDestroyCommandPool(ctx->secondaryDevice, ctx->secondaryCommandPool, NULL);
         vkDestroyDescriptorPool(ctx->secondaryDevice, ctx->secondaryDescriptorPool, NULL);
+        vkDestroyPipelineCache(ctx->secondaryDevice, ctx->secondaryPipelineCache, NULL);
         vkDestroyDevice(ctx->secondaryDevice, NULL);
       }
     }
@@ -408,6 +410,19 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryHypertreeSignatureBufferHostVisible);
   if (err) goto cleanup;
+
+  // Pipeline caches
+  VkPipelineCacheCreateInfo cacheCreateInfo = {
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+  };
+  err = vkCreatePipelineCache(ctx->primaryDevice, &cacheCreateInfo, NULL, &ctx->primaryPipelineCache);
+  if (err) goto cleanup;
+  if (ctx->secondaryDevice == ctx->primaryDevice) {
+    ctx->secondaryPipelineCache = ctx->primaryPipelineCache;
+  } else {
+    err = vkCreatePipelineCache(ctx->secondaryDevice, &cacheCreateInfo, NULL, &ctx->secondaryPipelineCache);
+    if (err) goto cleanup;
+  }
 
   /**** Secondary device buffers ****/
 
@@ -844,7 +859,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->primarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -856,7 +871,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->primarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -868,7 +883,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->primarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -880,7 +895,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->primarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -892,7 +907,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->keygenPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -906,7 +921,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->keygenPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -918,7 +933,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->keygenPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -930,7 +945,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->verifyPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -942,7 +957,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->secondarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->secondaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->secondaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -954,7 +969,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->secondarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->secondaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->secondaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
