@@ -67,6 +67,12 @@ To build `slhvk` as a static library in `lib/libslhvk.a`:
 make
 ```
 
+To build all test/bench binaries without running them:
+
+```sh
+make build-tests
+```
+
 ### Header
 
 The exported public API of `libslhvk` is declared in [the `include/slhvk.h` header file](./include/slhvk.h)
@@ -77,6 +83,12 @@ To confirm `slhvk` is working correctly, generating valid signatures, etc:
 
 ```sh
 make unit
+```
+
+With sanitizers enabled (ASan/UBSan/LSan):
+
+```sh
+make unit-san
 ```
 
 On first-run this will download NIST test vectors from Github. Once downloaded, the tests will run in sequence. Afterwards you should see output like this:
