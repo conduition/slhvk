@@ -48,6 +48,10 @@ int slhvkCachedRootTreeInit(SlhvkContext ctx, SlhvkCachedRootTree_T** cachedRoot
   if (err) goto cleanup;
 
   SlhvkCachedRootTree_T* cachedRootTree = malloc(sizeof(SlhvkCachedRootTree_T));
+  if (cachedRootTree == NULL) {
+    err = SLHVK_ERROR_MEMORY_TYPE_NOT_FOUND;
+    goto cleanup;
+  }
   cachedRootTree->ctx = ctx;
   cachedRootTree->buffer = buffer;
   cachedRootTree->memory = memory;

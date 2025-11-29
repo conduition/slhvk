@@ -145,6 +145,9 @@ void slhvkContextFree(SlhvkContext_T* ctx) {
 int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   VkPhysicalDevice* physicalDevices = NULL;
   SlhvkContext_T* ctx = calloc(1, sizeof(SlhvkContext_T));
+  if (ctx == NULL) {
+    return SLHVK_ERROR_NO_COMPUTE_DEVICE;
+  }
   int err = 0;
 
 
@@ -167,6 +170,10 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     if (err) goto cleanup;
 
     VkLayerProperties* layerProperties = malloc(numLayerProperties * sizeof(VkLayerProperties));
+    if (layerProperties == NULL) {
+      err = SLHVK_ERROR_NO_COMPUTE_DEVICE;
+      goto cleanup;
+    }
     err = vkEnumerateInstanceLayerProperties(&numLayerProperties, layerProperties);
     if (err) {
       free(layerProperties);
@@ -207,6 +214,10 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   }
 
   physicalDevices = (VkPhysicalDevice*) malloc(physicalDevicesCount * sizeof(VkPhysicalDevice));
+  if (physicalDevices == NULL) {
+    err = SLHVK_ERROR_NO_COMPUTE_DEVICE;
+    goto cleanup;
+  }
   err = vkEnumeratePhysicalDevices(ctx->instance, &physicalDevicesCount, physicalDevices);
   if (err) goto cleanup;
   else if (physicalDevicesCount == 0) {
