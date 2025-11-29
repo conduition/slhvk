@@ -14,13 +14,15 @@ int slhvkFindDeviceComputeQueueFamily(VkPhysicalDevice physicalDevice) {
   vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);
   VkQueueFamilyProperties* queueFamilies = malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
   vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies);
+  int found = -1;
   for (uint32_t i = 0; i < queueFamilyCount; i++) {
     if (queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
-      return i;
+      found = (int) i;
+      break;
     }
   }
   free(queueFamilies);
-  return -1;
+  return found;
 }
 
 int slhvkAllocateBufferMemory(
