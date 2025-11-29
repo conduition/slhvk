@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <limits.h>
 
 #include "keygen.h"
 #include "context.h"
@@ -10,6 +11,17 @@
 
 static uint32_t min(uint32_t x, uint32_t y) {
   return x < y ? x : y;
+}
+
+// Safe multiply for buffer sizing; returns false on overflow.
+static bool checkedMulSize(size_t* out, size_t a, size_t b) {
+  if (a != 0 && b > SIZE_MAX / a) {
+    return false;
+  }
+
+  *out = a * b;
+
+  return true;
 }
 
 void slhvkCachedRootTreeFree(SlhvkCachedRootTree_T* cachedRootTree) {
@@ -70,6 +82,11 @@ int slhvkKeygenBulk(
   SlhvkCachedRootTree* cachedRootTreesOut
 ) {
   int err = 0;
+  static const uint32_t KEYGEN_MAX_KEYS = 100000;
+  if (keysCount == 0 || keysCount > KEYGEN_MAX_KEYS) {
+    return SLHVK_ERROR_INPUT_TOO_LARGE;
+  }
+
   VkBuffer keygenIOStagingBuffer = NULL;
   VkBuffer keygenSha256StateStagingBuffer = NULL;
   VkBuffer keygenIOBuffer = NULL;
@@ -91,18 +108,54 @@ int slhvkKeygenBulk(
 
   uint32_t keysChunkCount = keysCount;
 
-  // Scale the chunks size down until we meet device limits.
+  // Scale the chunk size down until we meet device limits and avoid overflow.
   VkPhysicalDeviceLimits* limits = &ctx->primaryDeviceProperties.limits;
   while (
-    slhvkNumWorkGroups(keysChunkCount * SLHVK_XMSS_LEAVES * SLHVK_WOTS_CHAIN_COUNT) > limits->maxComputeWorkGroupCount[0] ||
-    N * keysChunkCount * SLHVK_WOTS_CHAIN_COUNT * SLHVK_XMSS_LEAVES > limits->maxStorageBufferRange
+    keysChunkCount > 0
   ) {
+    // Use 64-bit intermediates to avoid overflow when computing thread/workgroup counts.
+    uint64_t threadsWots = (uint64_t) keysChunkCount * SLHVK_XMSS_LEAVES * SLHVK_WOTS_CHAIN_COUNT;
+    uint64_t workgroupsWots = (threadsWots + SLHVK_DEFAULT_WORK_GROUP_SIZE - 1) / SLHVK_DEFAULT_WORK_GROUP_SIZE;
+
+    uint64_t threadsXmss = (uint64_t) keysChunkCount * SLHVK_XMSS_LEAVES;
+    uint64_t workgroupsXmss = (threadsXmss + SLHVK_DEFAULT_WORK_GROUP_SIZE - 1) / SLHVK_DEFAULT_WORK_GROUP_SIZE;
+
+    // Check buffer size products for overflow before comparing against device limits.
+    size_t tmpSize;
+    bool sizeOk =
+      checkedMulSize(&tmpSize, keysChunkCount, N) &&
+      checkedMulSize(&tmpSize, tmpSize, SLHVK_WOTS_CHAIN_COUNT) &&
+      checkedMulSize(&tmpSize, tmpSize, SLHVK_XMSS_LEAVES);
+
+    if (
+      sizeOk &&
+      workgroupsWots <= limits->maxComputeWorkGroupCount[0] &&
+      workgroupsXmss <= limits->maxComputeWorkGroupCount[0] &&
+      tmpSize <= limits->maxStorageBufferRange
+    ) {
+      break;
+    }
+
     keysChunkCount >>= 1;
+  }
+
+  if (keysChunkCount == 0) {
+    err = SLHVK_ERROR_INPUT_TOO_LARGE;
+    goto cleanup;
   }
 
   const size_t keygenIOBufferSize = keysChunkCount * N;
   const size_t sha256StateBufferSize = keysChunkCount * 8 * sizeof(uint32_t);
   const size_t xmssNodesBufferSize = keysChunkCount * N * SLHVK_XMSS_LEAVES;
+
+  // Guard against overflow of buffer sizes.
+  size_t wotsChainSize;
+  size_t xmssNodesSize;
+  if (!checkedMulSize(&wotsChainSize, keysChunkCount, N * SLHVK_WOTS_CHAIN_COUNT * SLHVK_XMSS_LEAVES) ||
+      !checkedMulSize(&xmssNodesSize, keysChunkCount, N * SLHVK_XMSS_LEAVES)) {
+    err = SLHVK_ERROR_INPUT_TOO_LARGE;
+    goto cleanup;
+  }
 
   /**************  Create keygen buffers  *******************/
 
@@ -123,12 +176,12 @@ int slhvkKeygenBulk(
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenSha256StateBuffer);
   if (err) goto cleanup;
 
-  bufferCreateInfo.size = keysChunkCount * N * SLHVK_WOTS_CHAIN_COUNT * SLHVK_XMSS_LEAVES;
+  bufferCreateInfo.size = wotsChainSize;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenWotsChainBuffer);
   if (err) goto cleanup;
 
-  bufferCreateInfo.size = xmssNodesBufferSize;
+  bufferCreateInfo.size = xmssNodesSize;
   bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &keygenXmssNodesBuffer);
   if (err) goto cleanup;

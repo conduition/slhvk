@@ -64,6 +64,7 @@ typedef enum SlhvkError {
   SLHVK_SUCCESS = 0,
   SLHVK_ERROR_NO_COMPUTE_DEVICE = 40,
   SLHVK_ERROR_MEMORY_TYPE_NOT_FOUND = 41,
+  SLHVK_ERROR_INPUT_TOO_LARGE = 42,
 } SlhvkError;
 
 void slhvkContextFree(SlhvkContext ctx);
