@@ -471,6 +471,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     &ctx->primaryXmssMessagesBufferMemory,
     &ctx->primaryHypertreeSignatureBufferDeviceLocalMemory,
   };
+  VkMemoryPropertyFlags* primaryDeviceLocalFlags[PRIMARY_DEVICE_LOCAL_BUFFER_COUNT] = {
+    &ctx->primaryInputsBufferDeviceLocalFlags,
+    &ctx->primaryWotsChainBufferFlags,
+    &ctx->primaryXmssNodesBufferFlags,
+    &ctx->primaryXmssMessagesBufferFlags,
+    &ctx->primaryHypertreeSignatureBufferDeviceLocalFlags,
+  };
 
   for (uint32_t i = 0; i < PRIMARY_DEVICE_LOCAL_BUFFER_COUNT; i++) {
     err = slhvkAllocateBufferMemory(
@@ -478,7 +485,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       ctx->primaryPhysicalDevice,
       primaryDeviceLocalBuffers[i],
       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-      &ctx->primaryDeviceLocalMemoryFlags, // TODO: assumes buffers end up with the same memory type
+      primaryDeviceLocalFlags[i],
       primaryDeviceLocalMemories[i]
     );
     if (err) goto cleanup;
@@ -500,6 +507,12 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     &ctx->secondaryForsNodesBufferMemory,
     &ctx->secondaryForsSignatureBufferDeviceLocalMemory,
   };
+  VkMemoryPropertyFlags* secondaryDeviceLocalFlags[SECONDARY_DEVICE_LOCAL_BUFFER_COUNT] = {
+    &ctx->secondaryInputsBufferDeviceLocalFlags,
+    &ctx->secondaryForsMessageBufferDeviceLocalFlags,
+    &ctx->secondaryForsNodesBufferFlags,
+    &ctx->secondaryForsSignatureBufferDeviceLocalFlags,
+  };
 
   for (uint32_t i = 0; i < SECONDARY_DEVICE_LOCAL_BUFFER_COUNT; i++) {
     err = slhvkAllocateBufferMemory(
@@ -507,7 +520,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       ctx->secondaryPhysicalDevice,
       secondaryDeviceLocalBuffers[i],
       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-      &ctx->secondaryDeviceLocalMemoryFlags, // TODO: assumes buffers end up with the same memory type
+      secondaryDeviceLocalFlags[i],
       secondaryDeviceLocalMemories[i]
     );
     if (err) goto cleanup;
@@ -517,13 +530,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   /*******************  Allocate primary host visible memory  **********************/
 
   // Only allocate if device local memory isn't already host-visible.
-  if (!(ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+  if (!(ctx->primaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
     err = slhvkAllocateBufferMemory(
       ctx->primaryDevice,
       ctx->primaryPhysicalDevice,
       ctx->primaryInputsBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx->primaryDeviceHostVisibleMemoryFlags,
+      &ctx->primaryInputsBufferHostVisibleFlags,
       &ctx->primaryInputsBufferHostVisibleMemory
     );
     if (err) goto cleanup;
@@ -533,7 +546,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       ctx->primaryPhysicalDevice,
       ctx->primaryHypertreeSignatureBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx->primaryDeviceHostVisibleMemoryFlags,
+      &ctx->primaryHypertreeSignatureBufferHostVisibleFlags,
       &ctx->primaryHypertreeSignatureBufferHostVisibleMemory
     );
     if (err) goto cleanup;
@@ -544,7 +557,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     ctx->primaryPhysicalDevice,
     ctx->primaryForsPubkeyStagingBuffer,
     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-    &ctx->primaryDeviceHostVisibleMemoryFlags,
+    &ctx->primaryForsPubkeyStagingBufferFlags,
     &ctx->primaryForsPubkeyStagingBufferMemory
   );
   if (err) goto cleanup;
@@ -553,13 +566,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   /*******************  Allocate secondary host visible memory  **********************/
 
   // Only allocate if device local memory isn't already host-visible.
-  if (!(ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+  if (!(ctx->secondaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
     err = slhvkAllocateBufferMemory(
       ctx->secondaryDevice,
       ctx->secondaryPhysicalDevice,
       ctx->secondaryInputsBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx->secondaryDeviceHostVisibleMemoryFlags,
+      &ctx->secondaryInputsBufferHostVisibleFlags,
       &ctx->secondaryInputsBufferHostVisibleMemory
     );
     if (err) goto cleanup;
@@ -569,7 +582,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       ctx->secondaryPhysicalDevice,
       ctx->secondaryForsMessageBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx->secondaryDeviceHostVisibleMemoryFlags,
+      &ctx->secondaryForsMessageBufferHostVisibleFlags,
       &ctx->secondaryForsMessageBufferHostVisibleMemory
     );
     if (err) goto cleanup;
@@ -579,7 +592,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       ctx->secondaryPhysicalDevice,
       ctx->secondaryForsSignatureBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx->secondaryDeviceHostVisibleMemoryFlags,
+      &ctx->secondaryForsSignatureBufferHostVisibleFlags,
       &ctx->secondaryForsSignatureBufferHostVisibleMemory
     );
     if (err) goto cleanup;
@@ -590,7 +603,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     ctx->secondaryPhysicalDevice,
     ctx->secondaryForsRootsBuffer,
     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-    &ctx->secondaryDeviceHostVisibleMemoryFlags,
+    &ctx->secondaryForsRootsBufferFlags,
     &ctx->secondaryForsRootsBufferMemory
   );
   if (err) goto cleanup;
@@ -997,7 +1010,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   // Copy from a host-visible buffer if the device-local buffer isn't also host-visible.
-  if ((ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
+  if ((ctx->primaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = sizeof(CommonSigningInputs) };
     vkCmdCopyBuffer(
       ctx->primaryHypertreePresignCommandBuffer,
@@ -1127,7 +1140,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   // Copy from host-visible buffers if the device-local buffer isn't also host-visible.
-  if ((ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
+  if ((ctx->secondaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = sizeof(CommonSigningInputs) };
     vkCmdCopyBuffer(
       ctx->secondaryForsCommandBuffer,
@@ -1211,7 +1224,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   );
 
   // Copy to host-visible buffer if the device-local buffer isn't also host-visible.
-  if ((ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
+  if ((ctx->secondaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = SLHVK_FORS_SIGNATURE_SIZE };
     vkCmdCopyBuffer(
       ctx->secondaryForsCommandBuffer,
@@ -1296,7 +1309,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   );
 
   // Copy to a host-visible buffer if the device-local buffer isn't also host-visible.
-  if ((ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
+  if ((ctx->primaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = SLHVK_HYPERTREE_SIGNATURE_SIZE };
     vkCmdCopyBuffer(
       ctx->primaryHypertreeFinishCommandBuffer,
