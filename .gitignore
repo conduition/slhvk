@@ -59,3 +59,9 @@ src/shaders/*.h
 *.test
 tests/runner
 tests/vectors
+
+# Python compiled files
+__pycache__
+
+# Nix built symlink
+result
