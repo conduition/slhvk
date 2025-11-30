@@ -188,6 +188,8 @@ void slhvkDigestAndSplitMsg(
     }
   }
 
-  *treeAddressPtr = treeAddress & TREE_ADDRESS_MASK;
-  *signingKeypairAddressPtr = signingKeypairAddress & SIGNING_KEYPAIR_ADDRESS_MASK;
+  uint64_t maskedTreeAddress = treeAddress & TREE_ADDRESS_MASK;
+  uint32_t maskedKeypairAddress = signingKeypairAddress & SIGNING_KEYPAIR_ADDRESS_MASK;
+  memcpy(treeAddressPtr, &maskedTreeAddress, sizeof(maskedTreeAddress));
+  memcpy(signingKeypairAddressPtr, &maskedKeypairAddress, sizeof(maskedKeypairAddress));
 }

@@ -1,5 +1,6 @@
 CC     ?= cc
 CFLAGS += -O3 -Wall -Wextra -Werror=pedantic -Werror=vla -Iinclude
+LDFLAGS ?=
 
 HDR := $(wildcard src/*.h)
 SRC := $(wildcard src/*.c)
@@ -60,8 +61,11 @@ TEST_HDR        := tests/utils.h tests/acvp.h
 TEST_CFLAGS     := $(CFLAGS) -Llib
 TEST_VEC_DIR    := tests/vectors
 
+.PHONY: build-tests
+build-tests: $(UNIT_TEST_BIN) $(BENCH_TEST_BIN) $(TEST_RUNNER)
+
 %.test: %.c $(TEST_HDR) $(HDR) lib/libslhvk.a $(TEST_VENDOR_OBJ)
-	$(CC) $(TEST_CFLAGS) -o $@ $< $(TEST_VENDOR_OBJ) -lslhvk -lvulkan
+	$(CC) $(TEST_CFLAGS) $(LDFLAGS) -o $@ $< $(TEST_VENDOR_OBJ) -lslhvk -lvulkan
 
 # Build test binaries
 $(UNIT_TEST_BIN):
@@ -72,7 +76,18 @@ tests/vendor/cJSON.o: tests/vendor/cJSON.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(TEST_RUNNER): $(TEST_RUNNER_SRC) $(TEST_HDR)
-	$(CC) $(CFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+
+.PHONY: unit-san
+unit-san: CFLAGS += -fsanitize=address,undefined,leak -fno-omit-frame-pointer
+unit-san: LDFLAGS += -fsanitize=address,undefined,leak
+unit-san: clean build-tests
+	./$(TEST_RUNNER) tests/bin/unit
+
+.PHONY: build-tests-san
+build-tests-san: CFLAGS += -fsanitize=address,undefined,leak -fno-omit-frame-pointer
+build-tests-san: LDFLAGS += -fsanitize=address,undefined,leak
+build-tests-san: clean build-tests
 
 .PHONY: test
 test: $(TEST_RUNNER) $(UNIT_TEST_BIN) $(TEST_VEC_DIR) $(BENCH_TEST_BIN)
