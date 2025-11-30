@@ -127,12 +127,14 @@ void slhvkContextFree(SlhvkContext_T* ctx) {
       // primary device-wide resources
       vkDestroyCommandPool(ctx->primaryDevice, ctx->primaryCommandPool, NULL);
       vkDestroyDescriptorPool(ctx->primaryDevice, ctx->primaryDescriptorPool, NULL);
+      vkDestroyPipelineCache(ctx->primaryDevice, ctx->primaryPipelineCache, NULL);
       vkDestroyDevice(ctx->primaryDevice, NULL);
 
       // secondary device wide resources (if not the same as the primary device)
       if (ctx->secondaryDevice != ctx->primaryDevice) {
         vkDestroyCommandPool(ctx->secondaryDevice, ctx->secondaryCommandPool, NULL);
         vkDestroyDescriptorPool(ctx->secondaryDevice, ctx->secondaryDescriptorPool, NULL);
+        vkDestroyPipelineCache(ctx->secondaryDevice, ctx->secondaryPipelineCache, NULL);
         vkDestroyDevice(ctx->secondaryDevice, NULL);
       }
     }
@@ -145,6 +147,9 @@ void slhvkContextFree(SlhvkContext_T* ctx) {
 int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   VkPhysicalDevice* physicalDevices = NULL;
   SlhvkContext_T* ctx = calloc(1, sizeof(SlhvkContext_T));
+  if (ctx == NULL) {
+    return SLHVK_ERROR_NO_COMPUTE_DEVICE;
+  }
   int err = 0;
 
 
@@ -167,6 +172,10 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     if (err) goto cleanup;
 
     VkLayerProperties* layerProperties = malloc(numLayerProperties * sizeof(VkLayerProperties));
+    if (layerProperties == NULL) {
+      err = SLHVK_ERROR_NO_COMPUTE_DEVICE;
+      goto cleanup;
+    }
     err = vkEnumerateInstanceLayerProperties(&numLayerProperties, layerProperties);
     if (err) {
       free(layerProperties);
@@ -207,8 +216,12 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   }
 
   physicalDevices = (VkPhysicalDevice*) malloc(physicalDevicesCount * sizeof(VkPhysicalDevice));
+  if (physicalDevices == NULL) {
+    err = SLHVK_ERROR_NO_COMPUTE_DEVICE;
+    goto cleanup;
+  }
   err = vkEnumeratePhysicalDevices(ctx->instance, &physicalDevicesCount, physicalDevices);
-  if (err) return err;
+  if (err) goto cleanup;
   else if (physicalDevicesCount == 0) {
     err = SLHVK_ERROR_NO_COMPUTE_DEVICE;
     goto cleanup;
@@ -398,6 +411,19 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   err = vkCreateBuffer(ctx->primaryDevice, &bufferCreateInfo, NULL, &ctx->primaryHypertreeSignatureBufferHostVisible);
   if (err) goto cleanup;
 
+  // Pipeline caches
+  VkPipelineCacheCreateInfo cacheCreateInfo = {
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+  };
+  err = vkCreatePipelineCache(ctx->primaryDevice, &cacheCreateInfo, NULL, &ctx->primaryPipelineCache);
+  if (err) goto cleanup;
+  if (ctx->secondaryDevice == ctx->primaryDevice) {
+    ctx->secondaryPipelineCache = ctx->primaryPipelineCache;
+  } else {
+    err = vkCreatePipelineCache(ctx->secondaryDevice, &cacheCreateInfo, NULL, &ctx->secondaryPipelineCache);
+    if (err) goto cleanup;
+  }
+
   /**** Secondary device buffers ****/
 
   bufferCreateInfo.size = sizeof(CommonSigningInputs);
@@ -460,6 +486,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     &ctx->primaryXmssMessagesBufferMemory,
     &ctx->primaryHypertreeSignatureBufferDeviceLocalMemory,
   };
+  VkMemoryPropertyFlags* primaryDeviceLocalFlags[PRIMARY_DEVICE_LOCAL_BUFFER_COUNT] = {
+    &ctx->primaryInputsBufferDeviceLocalFlags,
+    &ctx->primaryWotsChainBufferFlags,
+    &ctx->primaryXmssNodesBufferFlags,
+    &ctx->primaryXmssMessagesBufferFlags,
+    &ctx->primaryHypertreeSignatureBufferDeviceLocalFlags,
+  };
 
   for (uint32_t i = 0; i < PRIMARY_DEVICE_LOCAL_BUFFER_COUNT; i++) {
     err = slhvkAllocateBufferMemory(
@@ -467,7 +500,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       ctx->primaryPhysicalDevice,
       primaryDeviceLocalBuffers[i],
       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-      &ctx->primaryDeviceLocalMemoryFlags, // TODO: assumes buffers end up with the same memory type
+      primaryDeviceLocalFlags[i],
       primaryDeviceLocalMemories[i]
     );
     if (err) goto cleanup;
@@ -489,6 +522,12 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     &ctx->secondaryForsNodesBufferMemory,
     &ctx->secondaryForsSignatureBufferDeviceLocalMemory,
   };
+  VkMemoryPropertyFlags* secondaryDeviceLocalFlags[SECONDARY_DEVICE_LOCAL_BUFFER_COUNT] = {
+    &ctx->secondaryInputsBufferDeviceLocalFlags,
+    &ctx->secondaryForsMessageBufferDeviceLocalFlags,
+    &ctx->secondaryForsNodesBufferFlags,
+    &ctx->secondaryForsSignatureBufferDeviceLocalFlags,
+  };
 
   for (uint32_t i = 0; i < SECONDARY_DEVICE_LOCAL_BUFFER_COUNT; i++) {
     err = slhvkAllocateBufferMemory(
@@ -496,7 +535,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       ctx->secondaryPhysicalDevice,
       secondaryDeviceLocalBuffers[i],
       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-      &ctx->secondaryDeviceLocalMemoryFlags, // TODO: assumes buffers end up with the same memory type
+      secondaryDeviceLocalFlags[i],
       secondaryDeviceLocalMemories[i]
     );
     if (err) goto cleanup;
@@ -506,13 +545,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   /*******************  Allocate primary host visible memory  **********************/
 
   // Only allocate if device local memory isn't already host-visible.
-  if (!(ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+  if (!(ctx->primaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
     err = slhvkAllocateBufferMemory(
       ctx->primaryDevice,
       ctx->primaryPhysicalDevice,
       ctx->primaryInputsBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx->primaryDeviceHostVisibleMemoryFlags,
+      &ctx->primaryInputsBufferHostVisibleFlags,
       &ctx->primaryInputsBufferHostVisibleMemory
     );
     if (err) goto cleanup;
@@ -522,7 +561,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       ctx->primaryPhysicalDevice,
       ctx->primaryHypertreeSignatureBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx->primaryDeviceHostVisibleMemoryFlags,
+      &ctx->primaryHypertreeSignatureBufferHostVisibleFlags,
       &ctx->primaryHypertreeSignatureBufferHostVisibleMemory
     );
     if (err) goto cleanup;
@@ -533,7 +572,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     ctx->primaryPhysicalDevice,
     ctx->primaryForsPubkeyStagingBuffer,
     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-    &ctx->primaryDeviceHostVisibleMemoryFlags,
+    &ctx->primaryForsPubkeyStagingBufferFlags,
     &ctx->primaryForsPubkeyStagingBufferMemory
   );
   if (err) goto cleanup;
@@ -542,13 +581,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   /*******************  Allocate secondary host visible memory  **********************/
 
   // Only allocate if device local memory isn't already host-visible.
-  if (!(ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+  if (!(ctx->secondaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
     err = slhvkAllocateBufferMemory(
       ctx->secondaryDevice,
       ctx->secondaryPhysicalDevice,
       ctx->secondaryInputsBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx->secondaryDeviceHostVisibleMemoryFlags,
+      &ctx->secondaryInputsBufferHostVisibleFlags,
       &ctx->secondaryInputsBufferHostVisibleMemory
     );
     if (err) goto cleanup;
@@ -558,7 +597,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       ctx->secondaryPhysicalDevice,
       ctx->secondaryForsMessageBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx->secondaryDeviceHostVisibleMemoryFlags,
+      &ctx->secondaryForsMessageBufferHostVisibleFlags,
       &ctx->secondaryForsMessageBufferHostVisibleMemory
     );
     if (err) goto cleanup;
@@ -568,7 +607,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       ctx->secondaryPhysicalDevice,
       ctx->secondaryForsSignatureBufferHostVisible,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-      &ctx->secondaryDeviceHostVisibleMemoryFlags,
+      &ctx->secondaryForsSignatureBufferHostVisibleFlags,
       &ctx->secondaryForsSignatureBufferHostVisibleMemory
     );
     if (err) goto cleanup;
@@ -579,7 +618,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     ctx->secondaryPhysicalDevice,
     ctx->secondaryForsRootsBuffer,
     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-    &ctx->secondaryDeviceHostVisibleMemoryFlags,
+    &ctx->secondaryForsRootsBufferFlags,
     &ctx->secondaryForsRootsBufferMemory
   );
   if (err) goto cleanup;
@@ -820,7 +859,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->primarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -832,7 +871,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->primarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -844,7 +883,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->primarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -856,7 +895,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->primarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -868,7 +907,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->keygenPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -882,7 +921,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->keygenPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -894,7 +933,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->keygenPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -906,7 +945,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->verifyPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->primaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->primaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -918,7 +957,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->secondarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->secondaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->secondaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -930,7 +969,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   pipelineCreateInfo.layout       = ctx->secondarySigningPipelineLayout;
   err = vkCreateComputePipelines(
     ctx->secondaryDevice,
-    VK_NULL_HANDLE, // pipeline cache, TODO
+    ctx->secondaryPipelineCache,
     1,
     &pipelineCreateInfo,
     NULL,
@@ -986,7 +1025,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   // Copy from a host-visible buffer if the device-local buffer isn't also host-visible.
-  if ((ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
+  if ((ctx->primaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = sizeof(CommonSigningInputs) };
     vkCmdCopyBuffer(
       ctx->primaryHypertreePresignCommandBuffer,
@@ -1116,7 +1155,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   // Copy from host-visible buffers if the device-local buffer isn't also host-visible.
-  if ((ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
+  if ((ctx->secondaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = sizeof(CommonSigningInputs) };
     vkCmdCopyBuffer(
       ctx->secondaryForsCommandBuffer,
@@ -1200,7 +1239,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   );
 
   // Copy to host-visible buffer if the device-local buffer isn't also host-visible.
-  if ((ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
+  if ((ctx->secondaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = SLHVK_FORS_SIGNATURE_SIZE };
     vkCmdCopyBuffer(
       ctx->secondaryForsCommandBuffer,
@@ -1285,7 +1324,7 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   );
 
   // Copy to a host-visible buffer if the device-local buffer isn't also host-visible.
-  if ((ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
+  if ((ctx->primaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = SLHVK_HYPERTREE_SIGNATURE_SIZE };
     vkCmdCopyBuffer(
       ctx->primaryHypertreeFinishCommandBuffer,

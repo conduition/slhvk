@@ -83,10 +83,10 @@ int slhvkSignPure(
   prepstate(&shaCtxInitial, pkSeed);
 
   // Write inputs straight to the device local buffers if we can.
-  VkDeviceMemory primaryInputsMemory = (ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+  VkDeviceMemory primaryInputsMemory = (ctx->primaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     ? ctx->primaryInputsBufferDeviceLocalMemory
     : ctx->primaryInputsBufferHostVisibleMemory;
-  VkDeviceMemory secondaryInputsMemory = (ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+  VkDeviceMemory secondaryInputsMemory = (ctx->secondaryInputsBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     ? ctx->secondaryInputsBufferDeviceLocalMemory
     : ctx->secondaryInputsBufferHostVisibleMemory;
 
@@ -171,9 +171,9 @@ int slhvkSignPure(
   if (err) goto cleanup;
 
   // Write the FORS indices to the FORS message buffer so it will be signed.
-  VkDeviceMemory forsMessageMemory = (ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
-    ? ctx->secondaryForsMessageBufferDeviceLocalMemory
-    : ctx->secondaryForsMessageBufferHostVisibleMemory;
+    VkDeviceMemory forsMessageMemory = (ctx->secondaryForsMessageBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+      ? ctx->secondaryForsMessageBufferDeviceLocalMemory
+      : ctx->secondaryForsMessageBufferHostVisibleMemory;
   uint32_t* mappedForsMessage = NULL;
   err = vkMapMemory(
     ctx->secondaryDevice,
@@ -260,7 +260,7 @@ int slhvkSignPure(
 
   // Copy the FORS signature to the output pointer
   uint8_t forsSig[SLHVK_FORS_SIGNATURE_SIZE];
-  VkDeviceMemory forsSigMemory = (ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+  VkDeviceMemory forsSigMemory = (ctx->secondaryForsSignatureBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     ? ctx->secondaryForsSignatureBufferDeviceLocalMemory
     : ctx->secondaryForsSignatureBufferHostVisibleMemory;
   uint8_t* mappedSignature = NULL;
@@ -271,7 +271,7 @@ int slhvkSignPure(
   vkUnmapMemory(ctx->secondaryDevice, forsSigMemory);
 
   // Copy the hypertree signature to the output pointer
-  VkDeviceMemory hypertreeSigMemory = (ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+  VkDeviceMemory hypertreeSigMemory = (ctx->primaryHypertreeSignatureBufferDeviceLocalFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     ? ctx->primaryHypertreeSignatureBufferDeviceLocalMemory
     : ctx->primaryHypertreeSignatureBufferHostVisibleMemory;
   err = vkMapMemory(ctx->primaryDevice, hypertreeSigMemory, 0, SLHVK_HYPERTREE_SIGNATURE_SIZE, 0, (void**) &mappedSignature);

@@ -13,6 +13,8 @@ int slhvkFindDeviceComputeQueueFamily(VkPhysicalDevice physicalDevice) {
   uint32_t queueFamilyCount = 0;
   vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);
   VkQueueFamilyProperties* queueFamilies = malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
+  if (queueFamilies == NULL) return -1;
+
   vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies);
   for (uint32_t i = 0; i < queueFamilyCount; i++) {
     if (queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
@@ -92,6 +94,7 @@ int slhvkSetupDescriptorSetLayout(
   VkDescriptorSetLayout* descriptorSetLayout
 ) {
   VkDescriptorSetLayoutBinding* bindings = malloc(bindingCount * sizeof(VkDescriptorSetLayoutBinding));
+  if (bindings == NULL) return VK_ERROR_OUT_OF_HOST_MEMORY;
 
   for (uint32_t i = 0; i < bindingCount; i++) {
     VkDescriptorSetLayoutBinding binding = {

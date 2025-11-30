@@ -10,22 +10,22 @@
 #define ERROR_INVALID_HEX_DATA 4
 
 size_t getFileSize(FILE* fp) {
-  int prev = ftell(fp);
+  off_t prev = ftello(fp);
   if (prev < 0) {
     perror("checking file pointer offset");
     return 0;
   }
-  int err = fseek(fp, 0, SEEK_END);
+  int err = fseeko(fp, 0, SEEK_END);
   if (err) {
     perror("seeking to end of file");
     return 0;
   }
-  int size = ftell(fp);
+  off_t size = ftello(fp);
   if (size < 0) {
     perror("checking file pointer offset after seeking");
     return 0;
   }
-  err = fseek(fp, prev, SEEK_SET);
+  err = fseeko(fp, prev, SEEK_SET);
   if (err) {
     perror("seeking back to initial file pointer offset");
     return 0;
