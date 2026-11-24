@@ -13,7 +13,7 @@ void eprintHex(const uint8_t* data, size_t len) {
   }
 }
 
-int main() {
+int main(void) {
   initTest();
 
   SlhvkContext ctx;

@@ -4,7 +4,7 @@
 #include "../../utils.h"
 #include "slhvk.h"
 
-int main() {
+int main(void) {
   initTest();
 
   Time initStart, initEnd;

@@ -7,7 +7,7 @@
 #include "../../acvp.h"
 #include "slhvk.h"
 
-int main() {
+int main(void) {
   initTest();
 
   SlhvkContext ctx;
