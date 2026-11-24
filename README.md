@@ -59,6 +59,24 @@ I highly recommend installing `vulkaninfo` so you can easily see which devices a
 sudo apt install -y build-essential libvulkan-dev glslang-tools vulkan-tools
 ```
 
+### macOS (Apple Silicon)
+
+On a Mac, Vulkan runs on the GPU through [MoltenVK](https://github.com/KhronosGroup/MoltenVK). Install it and the build tools with [Homebrew](https://brew.sh):
+
+```sh
+brew install molten-vk vulkan-loader vulkan-headers glslang vulkan-tools
+```
+
+Homebrew keeps its headers and libraries under its own prefix, so point the compiler and linker there before building:
+
+```sh
+export CPATH="$(brew --prefix)/include" LIBRARY_PATH="$(brew --prefix)/lib"
+```
+
+Then `make`, `make unit` and `make bench` work as below. `vulkaninfo --summary` should list your GPU with `driverName = MoltenVK`. The first run after a build spends a few extra seconds while macOS compiles the shaders for Metal; later runs reuse the cached result.
+
+Tested on an Apple M5 with macOS 27 and MoltenVK 1.4.2.
+
 ### Building
 
 To build `slhvk` as a static library in `lib/libslhvk.a`:

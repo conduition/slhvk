@@ -282,6 +282,13 @@ int slhvkKeygenBulk(
     );
   }
 
+  // The input copies above must complete before any shader reads those buffers.
+  slhvkCmdMemoryBarrier(
+    keygenCommandBuffers[0],
+    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT
+  );
+
   // All keygen shaders share the same descriptor set (TODO)
   vkCmdBindDescriptorSets(
     keygenCommandBuffers[0],
@@ -351,6 +358,12 @@ int slhvkKeygenBulk(
 
   // If needed, copy the root tree leaf nodes back to the host so they can be cached.
   if (cachedRootTreesOut != NULL) {
+    // The XMSS leaves shader must finish writing the nodes before they are copied.
+    slhvkCmdMemoryBarrier(
+      keygenCommandBuffers[0],
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT
+    );
     VkBufferCopy regions = { .size = xmssNodesBufferSize };
     vkCmdCopyBuffer(
       keygenCommandBuffers[0],
@@ -386,6 +399,12 @@ int slhvkKeygenBulk(
   );
 
   // Copy the output pubkey roots back to the staging IO buffer if needed.
+  slhvkCmdMemoryBarrier(
+    keygenCommandBuffers[0],
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+    VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_HOST_READ_BIT
+  );
   if (keygenIOMemory == keygenIOStagingBufferMemory) {
     VkBufferCopy regions = { .size = keygenIOBufferSize };
     vkCmdCopyBuffer(
@@ -397,7 +416,17 @@ int slhvkKeygenBulk(
     );
   }
 
-  vkCmdSetEvent(keygenCommandBuffers[0], keygenDoneEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+  slhvkCmdMemoryBarrier(
+    keygenCommandBuffers[0],
+    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+    VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT
+  );
+  // The event covers the root tree copy (a transfer) as well as the shaders.
+  vkCmdSetEvent(
+    keygenCommandBuffers[0],
+    keygenDoneEvent,
+    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+  );
 
   // We don't need to overwrite the SK Seeds in keygenIOBuffer, because
   // they are overwritten by the output of the XMSS roots shader on the device
@@ -464,15 +493,21 @@ int slhvkKeygenBulk(
       if (err) goto cleanup;
 
       // Ensure this command buffer waits for the previous command buffer to finish.
+      VkMemoryBarrier rootTreesReady = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
+      };
       vkCmdWaitEvents(
         keygenCommandBuffers[1],
         1,
         &keygenDoneEvent,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0, NULL, 0, NULL, 0, NULL
+        VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        1, &rootTreesReady, 0, NULL, 0, NULL
       );
-      vkCmdResetEvent(keygenCommandBuffers[1], keygenDoneEvent, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+      // Reset at the transfer stage, which the wait above covers.
+      vkCmdResetEvent(keygenCommandBuffers[1], keygenDoneEvent, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
       VkBufferCopy region = { .size = SLHVK_XMSS_CACHED_TREE_SIZE };
       for (uint32_t i = 0; i < thisChunkSize; i++) {

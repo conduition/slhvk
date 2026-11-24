@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 
 #include "context.h"
+#include "vkutil.h"
 #include "hashing.h"
 #include "keygen.h"
 #include "sha256.h"
@@ -132,6 +133,12 @@ int slhvkSignPure(
 
   // Copy the cached root tree to the xmss nodes buffer.
   if (cachedXmssRootTree != NULL) {
+    // The cached tree was written by an earlier keygen submission: make those writes visible to this copy.
+    slhvkCmdMemoryBarrier(
+      ctx->primaryXmssRootTreeCopyCommandBuffer,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT
+    );
     VkBufferCopy regions = {
       .size = SLHVK_XMSS_CACHED_TREE_SIZE,
       .dstOffset = N * SLHVK_XMSS_LEAVES * (SLHVK_HYPERTREE_LAYERS - 1),
@@ -149,7 +156,7 @@ int slhvkSignPure(
   vkCmdSetEvent(
     ctx->primaryXmssRootTreeCopyCommandBuffer,
     ctx->primaryXmssRootTreeCopyDoneEvent,
-    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
   );
 
   err = vkEndCommandBuffer(ctx->primaryXmssRootTreeCopyCommandBuffer);

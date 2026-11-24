@@ -147,3 +147,18 @@ void slhvkBindBuffersToDescriptorSet(
     );
   }
 }
+
+void slhvkCmdMemoryBarrier(
+  VkCommandBuffer commandBuffer,
+  VkPipelineStageFlags srcStage,
+  VkAccessFlags srcAccess,
+  VkPipelineStageFlags dstStage,
+  VkAccessFlags dstAccess
+) {
+  VkMemoryBarrier barrier = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+    .srcAccessMask = srcAccess,
+    .dstAccessMask = dstAccess,
+  };
+  vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 1, &barrier, 0, NULL, 0, NULL);
+}

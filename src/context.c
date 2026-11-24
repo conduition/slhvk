@@ -996,6 +996,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       &regions // regions
     );
 
+    // The copy must finish reading the inputs before they are overwritten.
+    slhvkCmdMemoryBarrier(
+      ctx->primaryHypertreePresignCommandBuffer,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, 0
+    );
+
     // Overwrite the SK seed in host-visible memory
     vkCmdFillBuffer(
       ctx->primaryHypertreePresignCommandBuffer,
@@ -1003,6 +1010,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       0, // offset
       VK_WHOLE_SIZE,
       0 // data
+    );
+
+    // The device-local inputs must be written before the shaders read them.
+    slhvkCmdMemoryBarrier(
+      ctx->primaryHypertreePresignCommandBuffer,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT
     );
   }
 
@@ -1062,13 +1076,18 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
 
   // Wait to ensure the cached XMSS tree has been copied into the XMSS nodes
   // buffer (if available).
+  VkMemoryBarrier rootTreeCopied = {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+    .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+    .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+  };
   vkCmdWaitEvents(
     ctx->primaryHypertreePresignCommandBuffer,
     1,
     &ctx->primaryXmssRootTreeCopyDoneEvent,
+    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-    0, NULL, 0, NULL, 0, NULL
+    1, &rootTreeCopied, 0, NULL, 0, NULL
   );
   vkCmdResetEvent(
     ctx->primaryHypertreePresignCommandBuffer,
@@ -1126,6 +1145,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       &regions // regions
     );
 
+    // The copy must finish reading the inputs before they are overwritten.
+    slhvkCmdMemoryBarrier(
+      ctx->secondaryForsCommandBuffer,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, 0
+    );
+
     // Overwrite the SK seed in host-visible memory
     vkCmdFillBuffer(
       ctx->secondaryForsCommandBuffer,
@@ -1142,6 +1168,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
       ctx->secondaryForsMessageBufferDeviceLocal, // dest
       1, // region count
       &regions // regions
+    );
+
+    // The device-local inputs must be written before the shaders read them.
+    slhvkCmdMemoryBarrier(
+      ctx->secondaryForsCommandBuffer,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT
     );
   }
 
@@ -1199,6 +1232,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     1   // Z dimension workgroups
   );
 
+  // The FORS shaders must finish before their output is copied or read, and before their inputs are wiped.
+  slhvkCmdMemoryBarrier(
+    ctx->secondaryForsCommandBuffer,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_HOST_READ_BIT
+  );
+
   // Copy to host-visible buffer if the device-local buffer isn't also host-visible.
   if ((ctx->secondaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = SLHVK_FORS_SIGNATURE_SIZE };
@@ -1237,6 +1277,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     0 // data
   );
 
+  // The copied FORS signature and roots must be visible to the host.
+  slhvkCmdMemoryBarrier(
+    ctx->secondaryForsCommandBuffer,
+    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+    VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT
+  );
+
   err = vkEndCommandBuffer(ctx->secondaryForsCommandBuffer);
   if (err) goto cleanup;
 
@@ -1247,6 +1294,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
   if (err) goto cleanup;
 
   // Copy the FORS pubkey to the XMSS messages buffer
+  // The presigning submission's writes must be visible to this one.
+  slhvkCmdMemoryBarrier(
+    ctx->primaryHypertreeFinishCommandBuffer,
+    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT
+  );
+
   VkBufferCopy regions = {
     .size = FORS_PUBKEY_STAGING_BUFFER_SIZE,
     .srcOffset = 0,
@@ -1258,6 +1312,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     ctx->primaryXmssMessagesBuffer, // dest
     1, // region count
     &regions
+  );
+
+  // The WOTS message copy must be written before the shader reads it.
+  slhvkCmdMemoryBarrier(
+    ctx->primaryHypertreeFinishCommandBuffer,
+    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT
   );
 
   vkCmdBindDescriptorSets(
@@ -1284,6 +1345,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     1   // Z dimension workgroups
   );
 
+  // The WOTS shader must finish before its output is copied or read, and before its inputs are wiped.
+  slhvkCmdMemoryBarrier(
+    ctx->primaryHypertreeFinishCommandBuffer,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_HOST_READ_BIT
+  );
+
   // Copy to a host-visible buffer if the device-local buffer isn't also host-visible.
   if ((ctx->primaryDeviceLocalMemoryFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
     VkBufferCopy regions = { .size = SLHVK_HYPERTREE_SIGNATURE_SIZE };
@@ -1303,6 +1371,13 @@ int slhvkContextInit(SlhvkContext_T** ctxPtr) {
     0, // offset
     VK_WHOLE_SIZE,
     0 // data
+  );
+
+  // The copied hypertree signature must be visible to the host.
+  slhvkCmdMemoryBarrier(
+    ctx->primaryHypertreeFinishCommandBuffer,
+    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+    VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT
   );
 
   err = vkEndCommandBuffer(ctx->primaryHypertreeFinishCommandBuffer);

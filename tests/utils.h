@@ -13,7 +13,7 @@
 
 #define eprintf(...) fprintf(stderr, __VA_ARGS__)
 
-void initTest() {
+void initTest(void) {
   // Color all test binary output
   printf("%s", ANSI_COLOR_CYAN);
   eprintf("%s", ANSI_COLOR_YELLOW);

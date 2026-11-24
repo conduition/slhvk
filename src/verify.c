@@ -177,6 +177,13 @@ int slhvkVerifyPure(
     );
   }
 
+  // The input copy above must complete before the shader reads the signatures.
+  slhvkCmdMemoryBarrier(
+    ctx->primaryVerifyCommandBuffer,
+    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT
+  );
+
   vkCmdBindDescriptorSets(
     ctx->primaryVerifyCommandBuffer,
     VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -211,6 +218,14 @@ int slhvkVerifyPure(
     1   // Z dimension workgroups
   );
 
+  // The shader's results must be written before they are copied back or read by the host.
+  slhvkCmdMemoryBarrier(
+    ctx->primaryVerifyCommandBuffer,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+    VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+    VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_HOST_READ_BIT
+  );
+
   // Copy the output pubkey roots back to the staging IO buffer if needed.
   if (verifyResultsOutputMemory == verifyResultsStagingBufferMemory) {
     VkBufferCopy regions = { .size = verifyResultsBufferSize };
@@ -220,6 +235,11 @@ int slhvkVerifyPure(
       verifyResultsStagingBuffer, // dest
       1, // region count
       &regions // regions
+    );
+    slhvkCmdMemoryBarrier(
+      ctx->primaryVerifyCommandBuffer,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+      VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT
     );
   }
 

@@ -33,7 +33,7 @@ endif
 # SLH-DSA code target
 lib/libslhvk.a: $(OBJ)
 	@mkdir -p lib
-	ar rcs -o $@ $(OBJ)
+	ar rcs $@ $(OBJ)
 
 %.o: %.c $(HDR) $(SHADER_HDR)
 	$(CC) $(CFLAGS) -c -o $@ $<
