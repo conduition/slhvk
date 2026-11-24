@@ -27,3 +27,13 @@ void slhvkBindBuffersToDescriptorSet(
   uint32_t buffersCount,
   VkDescriptorSet descriptorSet
 );
+
+// Records a global memory barrier: everything in srcStage that wrote with srcAccess
+// completes and becomes visible before dstStage reads or writes with dstAccess.
+void slhvkCmdMemoryBarrier(
+  VkCommandBuffer commandBuffer,
+  VkPipelineStageFlags srcStage,
+  VkAccessFlags srcAccess,
+  VkPipelineStageFlags dstStage,
+  VkAccessFlags dstAccess
+);
